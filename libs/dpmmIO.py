@@ -90,7 +90,7 @@ def load_data(in_file, transpose=True, get_names=False):
 
     #Bhavya Changes here // Extract the last column of the DataFrame for time_point value 
     #20240625: need to get the last column and drop it before replace 3 to nan
-    timepoint_x = df.iloc[:, -1].values
+    timepoint_x = df.iloc[:, -1].astype(int).values
     df = df.iloc[:, :-1]
     df.replace(3, np.nan, inplace=True)
     # replace homozygos mutations with heterozygos
@@ -195,10 +195,10 @@ def _get_out_dir(args, prefix=''):
 # ------------------------------------------------------------------------------
 
 def _infer_results(args, results, data):
-    print(f"in infer_results results {results}")
     args.PSRF = ut.get_lugsail_batch_means_est(
         [(i['ML'], i['burn_in']) for i in results]
     )
+    print("PSRF", args.PSRF)
     args.steps = [i['ML'].size for i in results]
     if args.single_chains:
         inferred = {i: {} for i in range(args.chains)}
@@ -332,7 +332,7 @@ def show_model_parameters(data, args, fixed_errors_flag):
             '\tPrior FN:\t'
             f'trunc norm({args.allelicDropout_mean},{args.allelicDropout_std})')
 
-    if args.DP_alpha < 1:
+    if args.DP_alpha[0] < 1:
         DP_a = np.log(data.shape[0])
     else:
         DP_a = args.DP_alpha
@@ -436,13 +436,13 @@ def save_config(args, out_dir, out_file='args.txt'):
 
     args_dict['time'] = [f'{i:%Y%m%d_%H:%M:%S}' for i in args_dict['time']]
 
-    if args_dict['falseNegative'] > 0:
+    if args_dict['falseNegative'][0] > 0:
         del args_dict['falseNegative_mean']
         del args_dict['falseNegative_std']
     else:
         del args_dict['falseNegative']
 
-    if args_dict['falsePositive'] > 0:
+    if args_dict['falsePositive'][0] > 0:
         del args_dict['falsePositive_mean']
         del args_dict['falsePositive_std']
     else:
@@ -457,11 +457,13 @@ def save_errors(data, args, out_dir):
     idx = np.arange(len(args.estimator) * args.chains)
     cols = ['chain', 'estimator', 'FN_model', 'FN_data', 'FP_model', 'FP_data']
     df = pd.DataFrame(index=idx, columns=cols)
-
+    print("in save errors")
     i = 0
     for chain, data_chain in data.items():
+        print(chain)
         for est, data_est in data_chain.items():
             if est == 'posterior':
+                print(data_est['FN'])
                 errors = [f'{data_est["FN"][0]:.4f}+-{data_est["FN"][1]:.4f}',
                     data_est['FN_geno'].round(4),
                     f'{data_est["FP"][0]:.8f}+-{data_est["FP"][1]:.8f}',

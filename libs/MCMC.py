@@ -82,24 +82,20 @@ class MCMC:
         # Run with steps
         if isinstance(run_var[0], int):
             Chain_type = Chain_steps
-            print("In run", "chain type", Chain_type)
         # Run with lugsail batch means estimator
         elif isinstance(run_var[0], float):
             Chain_type = Chain_steps
             cutoff = run_var[0]
             run_var = (max(10, int(1 / (cutoff ** 2 - 1))), 0)
             verbosity_ls = verbosity
-            verbosity = 0
-            print(f"In run, Chain_type {Chain_type}, cutoff = {cutoff}, run_var = {run_var}, verbosity = {verbosity}")
+            verbosity = 0           
         # Run with runtime
         else:
             Chain_type = Chain_time
-            print("In run", "chain type", Chain_type)
         if assign_file:
             assign = io.load_txt(assign_file)
         else:
             assign = None
-        print(f"Assign {assign}")
         cores = min(n, mp.cpu_count())
         # Seed seed for reproducabilaty
         if seed > 0:
@@ -114,7 +110,6 @@ class MCMC:
             return
 
         pool = mp.Pool(cores)
-        print(f"cores {cores}")
         results = []
         for i in range(cores):
             result = pool.apply_async(
@@ -125,8 +120,8 @@ class MCMC:
         pool.close()
         pool.join()
         return_values = [result.get() for result in results]
-        print("Return values:", return_values)
-        print("Chains:", self.chains)
+        #print("Return values:", return_values)
+        #print("Chains:", self.chains)
         if cutoff:
             self.run_lugsail_chains(cutoff, cores, verbosity_ls)
 
@@ -135,12 +130,10 @@ class MCMC:
         np.random.seed(self.seeds[i])
         model = deepcopy(self.model)
         model.init(assign=assign)
-        print(f"in run chain assign {assign}")
         new_chain = Chain_type(
             model, i + 1, *run_var, self.params, verbosity,
             isinstance(assign, list)
         )
-        print(f"in run chain new chain{new_chain}")
         new_chain.run()
         
         return new_chain
@@ -148,7 +141,6 @@ class MCMC:
 
     def run_lugsail_chains(self, cutoff, cores, verbosity, n=200):
         steps_run = self.chains[0].results['ML'].size
-        print("in run_lugsail_chains")
         while True:
             PSRF = ut.get_lugsail_batch_means_est(
                 [(i.results['ML'], steps_run // 2) for i in self.chains]
@@ -221,7 +213,7 @@ class Chain():
 
         self.results = {}
         # MH counter
-        self.MH_counter = np.zeros((5, 2))
+        self.MH_counter = np.zeros((6, 2))
 
         self.verbosity = verbosity
         self.fix_assign = fix_assign
@@ -243,8 +235,9 @@ class Chain():
         self.results['ML'] = np.zeros(steps)
         self.results['MAP'] = np.zeros(steps)
         self.results['DP_alpha'] = np.zeros(steps)
-        self.results['FN'] = np.empty(steps)
-        self.results['FP'] = np.empty(steps)
+        # 20240629 Liting: Initial the result to be steps * number of time points 
+        self.results['FN'] = np.empty((steps, self.model.num_times))
+        self.results['FP'] = np.empty((steps, self.model.num_times))
         self.results['assignments'] = np.zeros(
             (steps, self.model.cells_total), dtype=int
         )
@@ -354,9 +347,11 @@ class Chain():
         self.MH_counter[0][0] += par_accepted
 
         if self.learning_errors and np.random.random() < self.mcmc['error_prob']:
+            #FP_declined, FN_declined, Miss_declined = self.model.update_error_rates()
             FP_declined, FN_declined = self.model.update_error_rates()
             self.MH_counter[3] += FP_declined
             self.MH_counter[4] += FN_declined
+            #self.MH_counter[5] += Miss_declined
 
 
 # ------------------------------------------------------------------------------
@@ -373,7 +368,6 @@ class Chain_steps(Chain):
 
         self.init_results(steps + 1)
         self.update_results(0, burn_in != 0)
-        print("in chain step", self.steps)
 
     def set_steps(self, n):
         self.steps = n + 1
@@ -391,7 +385,6 @@ class Chain_steps(Chain):
 
     def run(self, init_steps=0):
         # Run the MCMC - that's where all the work is done
-        print("in chain steps run")
         for step in range(1, self.steps, 1):
             if step % (self.steps // 10) == 0 and self.verbosity > 1:
                 self.stdout_progress(step + init_steps, self.steps + init_steps)
@@ -420,7 +413,6 @@ class Chain_time(Chain):
 
         self.init_results(500)
         self.update_results(0)
-        print("in chain time ")
 
     def stdout_progress(self, step_no, total):
         print(f'\t{self}\tstep:\t{step_no: >3}\t(remaining: {total:.1f} mins.)\n'

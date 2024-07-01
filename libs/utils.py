@@ -198,7 +198,6 @@ def _concat_chain_results(results):
     MAP = np.concatenate([i['MAP'][i['burn_in']:] for i in results])
     FN = np.concatenate([i['FN'][i['burn_in']:] for i in results])
     FP = np.concatenate([i['FP'][i['burn_in']:] for i in results])
-
     # Fill clusters not used by all chains with zeros
     params = [i['params'] for i in results]
     cl_max = np.max([i.shape[1] for i in params])
@@ -219,7 +218,7 @@ def _get_latents_posterior_chain(result, data):
     a = _get_posterior_avg(result['DP_alpha'][burn_in:])
     FN = _get_posterior_avg(result['FN'][burn_in:])
     FP = _get_posterior_avg(result['FP'][burn_in:])
-
+    print("_get_latents_posterior_chain FP FN", FP, FN)
     FN_geno = ((geno.T.values.round() == 1) & (data == 0)).sum() \
         / geno.values.round().sum()
     FP_geno = ((geno.T.values.round() == 0) & (data == 1)).sum() \
@@ -413,8 +412,6 @@ def collapse_cells_on_tree(data_folder, out_file=''):
 
 
 def get_lugsail_batch_means_est(data_in, steps=None):
-    m = len(data_in)
-    print(f"in get_lugsail_batch_means_est data_in {data_in}")
     T_iL = []
     s_i = []
     n_i = []

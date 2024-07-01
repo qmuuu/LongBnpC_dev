@@ -24,10 +24,12 @@ class CRP:
         FN_error (float): Fixed false negative rate
         FP_error (float): Fixed false positive rate
     """
-    def __init__(self, data, DP_alpha=np.array([-1, -1]), param_beta=np.array([1, 1]), FN_error=EPSILON,
+    def __init__(self, data, timepoint_x, DP_alpha=np.array([-1, -1]), param_beta=np.array([1, 1]), FN_error=EPSILON,
                 FP_error=EPSILON, Miss_error=EPSILON, num_times=1):
         # Fixed data
         self.data = data
+        self.timepoint_x = timepoint_x
+        self.num_times = num_times
         self.cells_total, self.muts_total = self.data.shape
 
         # Cluster parameter prior (beta function) parameters
@@ -50,7 +52,6 @@ class CRP:
         self.FP = FP_error
         self.FN = FN_error
         self.Miss = Miss_error
-        print("FP error", FP_error, "FN error", FN_error)
         if len(FP_error) != num_times:
             self.FP = FP_error * num_times
         if len(FN_error) != num_times:
@@ -75,7 +76,7 @@ class CRP:
         self.CRP_prior = None
         self.assignment = None
         self.parameters = None
-        self.cells_per_cluster = None
+        self.cells_per_cluster = None #{cluster_id: number of cells in this cluster}
 
         # MH proposal stDev's
         self.param_proposal_sd = np.array([0.1, 0.25, 0.5])
@@ -192,9 +193,6 @@ class CRP:
         elif mode == 'random':
             k = np.unique(self.assignment)
             params[k] = np.random.uniform(size=(k.size, self.muts_total))
-        print("params.shape", params.shape)
-        print("assignment", self.assignment)
-        print("par", params.shape, params[self.assignment])
         return np.clip(params, TMIN, TMAX).astype(np.float32)
 
 
@@ -212,9 +210,9 @@ class CRP:
         self.CRP_prior = np.append(0, CRP_prior)
 
 
-    def _calc_ll(self, x, theta, timepoint_x, flat=False):
-        ll_FN = theta * self._Bernoulli_FN(x, timepoint_x)
-        ll_FP = (1 - theta) * self._Bernoulli_FP(x, timepoint_x)
+    def _calc_ll(self, x, theta, time=[-1], flat=False):
+        ll_FN = theta * self._Bernoulli_FN(x, time)
+        ll_FP = (1 - theta) * self._Bernoulli_FP(x, time)
         ll_full = np.log(ll_FN + ll_FP)
         if flat:
             return bn.nansum(ll_full)
@@ -226,26 +224,58 @@ class CRP:
     #    return (1 - self.FN) ** x * self.FN ** (1 - x)
     
     #Bhavya Changes here // Updated Bernoulli function to accept timepoint as a parameter
-    def _Bernoulli_FN(self, x, timepoint_x):
-        return (1 - self.FN[timepoint_x]) ** x * self.FN[timepoint_x] ** (1 - x)
+    def _Bernoulli_FN(self, x, time = [-1]):
+        # 20240627 Liting: calculate the FN for all time points
+        FN = np.empty((x.shape[0], x.shape[1]))
+        # for all cells
+        if np.array_equal(time, [-1]):
+            for i in range(len(self.FN)):
+                idx = np.where(self.timepoint_x == i)[0]
+                cl_x = x[idx, : ]
+                temp = (1 - self.FN[i]) ** (1 - cl_x) * self.FN[i] ** cl_x
+                FN[idx, ] = temp
+            return FN
+        # for subset of cells
+        for i in range(x.shape[0]):
+            cl_x = x[i, :]
+            temp = (1 - self.FN[time[i]]) ** (1 - cl_x) * self.FN[time[i]] ** cl_x
+            FN[i, ] = temp
+        return FN
 
     #def _Bernoulli_FP(self, x):
     #    return (1 - self.FP) ** (1 - x) * self.FP ** x
 
-    #Bhavya Changes here // Updated Bernoulli function to accept timepoint as a parameter
-    def _Bernoulli_FP(self, x, timepoint_x):
-        return (1 - self.FP[timepoint_x]) ** (1 - x) * self.FP[timepoint_x] ** x
+    def _Bernoulli_FP(self, x, time=[-1]):
+        # 20240627 Liting: calculate the FP for all time points
+        # for all cell
+        FP = np.empty((x.shape[0], x.shape[1]))
+        if  np.array_equal(time, [-1]):
+            for i in range(len(self.FP)):
+                idx = np.where(self.timepoint_x == i)[0]
+                cl_x = x[idx, : ]
+                temp = (1 - self.FP[i]) ** (1 - cl_x) * self.FP[i] ** cl_x
+                FP[idx, ] = temp
+            return FP
+        # for subset of cells
+        for i in range(x.shape[0]):
+            cl_x = x[i, :]
+            temp = (1 - self.FP[time[i]]) ** (1 - cl_x) * self.FP[time[i]] ** cl_x
+            FP[i, ] = temp
+        return FP
+    
+    # 20240627 Liting: Commented out, not being used. 
+    # def _Bernoulli_mut(self, x, theta):
+    #     return x * (theta * (1 - self.FN) + (1 - theta) * self.FP)
 
-    def _Bernoulli_mut(self, x, theta):
-        return x * (theta * (1 - self.FN) + (1 - theta) * self.FP)
-
-
-    def _Bernoulli_wt(self, x, theta):
-        return (1 - x) * (theta * self.FN + (1 - theta) * (1 - self.FP))
+    # 20240627 Liting: Commented out, not being used. 
+    # def _Bernoulli_wt(self, x, theta):
+    #     return (1 - x) * (theta * self.FN + (1 - theta) * (1 - self.FP))
 
 
     def get_lpost_single(self, cell_id, cl_ids):
-        ll_single = self._calc_ll(self.data[[cell_id]], self.parameters[cl_ids])
+        # 20240627 Liting: Modified to take time as input
+        time = self.timepoint_x[cell_id]
+        ll_single = self._calc_ll(self.data[[cell_id]], self.parameters[cl_ids], [time])
         cl_size = np.fromiter(self.cells_per_cluster.values(), dtype=int)
         lprior = self.CRP_prior[cl_size]
         return ll_single + lprior
@@ -259,7 +289,7 @@ class CRP:
 
 
     def get_ll_full(self):
-        return self._calc_ll(self.data, self.parameters[self.assignment], True)
+        return self._calc_ll(self.data, self.parameters[self.assignment], flat = True)
 
 
     def get_lprior_full(self):
@@ -368,7 +398,7 @@ class CRP:
             return new_params, np.nan, bn.nansum(decline)
 
 
-    def _get_log_A(self, new_params, old_params, cells, a, b, std, timepoint_x, clip=False):
+    def _get_log_A(self, new_params, old_params, cells, a, b, std, clip=False):
         """ Calculate the MH acceptance paramter A
         """
         # Calculate the transition probabilitites
@@ -384,13 +414,8 @@ class CRP:
         x = self.data[cells]
         #Bhavya Changes here // Reading the last column value to get timepoint value
         #timepoint_x = x[len(x) - 1]
-
-        #ll_FN = self._Bernoulli_FN(x)
-        #ll_FP = self._Bernoulli_FP(x)
-
-        #Bhavya Changes here // Calling Bernoulli function by passing new timepoint parameter
-        ll_FN = self._Bernoulli_FN(x, timepoint_x)
-        ll_FP = self._Bernoulli_FN(x, timepoint_x)
+        ll_FN = self._Bernoulli_FN(self.data[cells], self.timepoint_x[cells])
+        ll_FP = self._Bernoulli_FP(self.data[cells], self.timepoint_x[cells])
         new_ll = bn.nansum(
             np.log(new_params * ll_FN + (1 - new_params) * ll_FP), axis=0
         )
@@ -476,6 +501,7 @@ class CRP:
                 break
 
         # Get two random items from the cluster
+        # NEED: Comeback and check what cells are, swap the last and first value to the random
         obs_i_idx, obs_j_idx = np.random.choice(cells.size, size=2, replace=False)
         cells[0], cells[obs_i_idx] = cells[obs_i_idx], cells[0]
         cells[-1], cells[obs_j_idx] = cells[obs_j_idx], cells[-1]
@@ -585,10 +611,11 @@ class CRP:
             # assign cells to clusters i and j randomly
             self.rg_assignment = np.random.choice([0, 1], size=(S.size))
         else:
+            # 20240628 Liting: added timepoint data to calculate ll
             ll_i = self._calc_ll(self.data[S],
-                np.nan_to_num(self.data[i], nan=self._beta_mix_const[0]))
+                np.nan_to_num(self.data[i], nan=self._beta_mix_const[0]), self.timepoint_x[S])
             ll_j = self._calc_ll(self.data[S],
-                np.nan_to_num(self.data[j], nan=self._beta_mix_const[0]))
+                np.nan_to_num(self.data[j], nan=self._beta_mix_const[0]), self.timepoint_x[S])
             self.rg_assignment = np.where(ll_j > ll_i, 1, 0)
         #initialize cluster parameters
         cells_i = np.append(S[np.argwhere(self.rg_assignment == 0)], i)
@@ -664,8 +691,9 @@ class CRP:
 
 
     def _rg_get_ll(self, cells, params):
-        ll_i = self._calc_ll(self.data[cells], params[0])
-        ll_j = self._calc_ll(self.data[cells], params[1])
+        # 20240628 Liting: Add timepoint. Cells are idx here 
+        ll_i = self._calc_ll(self.data[cells], params[0], self.timepoint_x[cells])
+        ll_j = self._calc_ll(self.data[cells], params[1], self.timepoint_x[cells])
         return np.stack([ll_i, ll_j], axis=1)
 
 
@@ -754,9 +782,9 @@ class CRP:
             cells[1:-1][np.nonzero(self.rg_assignment)], cells[-1]
         )
 
-        ll_i = self._calc_ll(self.data[i_ids], self.rg_params_split[0], True)
-        ll_j = self._calc_ll(self.data[j_ids], self.rg_params_split[1], True)
-        ll_all = self._calc_ll(self.data[cells], self.rg_params_merge, True)
+        ll_i = self._calc_ll(self.data[i_ids], self.rg_params_split[0], self.timepoint_x[i_ids], True)
+        ll_j = self._calc_ll(self.data[j_ids], self.rg_params_split[1], self.timepoint_x[j_ids], True)
+        ll_all = self._calc_ll(self.data[cells], self.rg_params_merge, self.timepoint_x[cells], True)
 
         if move == 'split':
             return ll_i + ll_j - ll_all

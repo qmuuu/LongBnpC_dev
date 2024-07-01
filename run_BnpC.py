@@ -223,9 +223,7 @@ def parse_args():
 
 def generate_output(args, results, data_raw, names):
     out_dir = io._get_out_dir(args)
-    print(f"in generating output")
     inferred = io._infer_results(args, results, data_raw)
-    print(f"generate output inferred {inferred}")
     if args.verbosity > 0:
         io.show_MCMC_summary(args, results)
         io.show_assignments(inferred, names[0])
@@ -269,18 +267,19 @@ def main(args):
         args.input, transpose=args.transpose, get_names=True
     )
     print("data shape", data.shape)
+    print("timepoint", timepoint_x)
     if args.falsePositive[0] > 0 and args.falseNegative[0] > 0:
         args.error_update_prob = 0
         import libs.CRP as CRP
         BnpC = CRP.CRP(
-            data, DP_alpha=args.DPa_prior, param_beta=args.param_prior,
+            data, timepoint_x, DP_alpha=args.DPa_prior, param_beta=args.param_prior,
             FN_error=args.falseNegative, FP_error=args.falsePositive, 
             Miss_error=args.missingRate
         )
     else:
         import libs.CRP_learning_errors as CRP
         BnpC = CRP.CRP_errors_learning(
-            data, DP_alpha=args.DPa_prior, param_beta=args.param_prior,
+            data, timepoint_x, DP_alpha=args.DPa_prior, param_beta=args.param_prior,
             FP_mean=args.falsePositive_mean, FP_sd=args.falsePositive_std,
             FN_mean=args.falseNegative_mean, FN_sd=args.falseNegative_std,
             Miss_mean=args.missingRate_mean, Miss_sd=args.missingRate_std,
@@ -302,18 +301,16 @@ def main(args):
         print(f'Run MCMC with ({args.chains} chains {run_str}):')
 
     if args.debug:
-        args.chains = 1
-    # ERROR: 
+        args.chains = 1 
     mcmc.run(
         run_var, args.seed, args.chains, args.verbosity, args.fixed_assignment,
         args.debug
     )
 
     args.chain_seeds = mcmc.get_seeds()
-    results = mcmc.get_results() #ERROR: return empty 
+    results = mcmc.get_results() 
     args.time.append(datetime.now())
     #generate_output(args, results, data, data_names)
-    #Bhavya Changes here
     generate_output(args, results, data, (row_names, col_names, timepoint_x))
 
 

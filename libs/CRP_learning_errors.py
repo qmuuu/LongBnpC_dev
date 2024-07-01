@@ -3,6 +3,7 @@
 import numpy as np
 from scipy.stats import beta, truncnorm
 import bottleneck as bn
+import copy
 
 try:
     from libs.CRP import CRP
@@ -16,10 +17,10 @@ except ImportError:
 
 class CRP_errors_learning(CRP):
     #Bhavya Changes here // Updated DP_alpha to an array
-    def __init__(self, data, DP_alpha=[1], param_beta=[1, 1], \
+    def __init__(self, data, timepoint_x, DP_alpha=[1], param_beta=[1, 1], \
                 FP_mean=0.001, FP_sd=0.0005, FN_mean=0.25, FN_sd=0.05, \
                 Miss_mean = 0.25, Miss_sd = 0.05, num_times = 1):
-        super().__init__(data, DP_alpha, param_beta, [FN_mean]*num_times, [FP_mean]*num_times, \
+        super().__init__(data, timepoint_x, DP_alpha, param_beta, [FN_mean]*num_times, [FP_mean]*num_times, \
                         [Miss_mean]*num_times, num_times=num_times)
         # Error rate prior
         FP_trunc_a = (0 - FP_mean) / FP_sd
@@ -52,21 +53,27 @@ class CRP_errors_learning(CRP):
             f'\tMiss:\t\ttrunc nurm({self.Miss_prior.args[2]},{self.Miss_prior.args[3]})\n'
         return out_str
 
-
+    '''
     def get_lprior_full(self):
         return super().get_lprior_full() \
             + self.FP_prior.logpdf(self.FP) + self.FN_prior.logpdf(self.FN) +  self.Miss_prior.logpdf(self.Miss)
-
+    '''
+# NEED: think about how to calcualte the prior probability given multiple FP and FN?
+# multiply? or addition? or mean?
+    def get_lprior_full(self):
+        return super().get_lprior_full() \
+            + np.mean(self.FP_prior.logpdf(self.FP)) + np.mean(self.FN_prior.logpdf(self.FN)) \
+               # +  np.mean(self.Miss_prior.logpdf(self.Miss))
 
     def update_error_rates(self):
         self.FP, FP_count = self.MH_error_rates('FP')
         self.FN, FN_count = self.MH_error_rates('FN')
         # 20240626 Liting: add missing rate
-        self.Miss, Miss_count = self.MH_error_rates('Miss')
-        return FP_count, FN_count, Miss_count
+        #self.Miss, Miss_count = self.MH_error_rates('Miss')
+        return FP_count, FN_count#, Miss_count
 
 
-    def get_ll_full_error(self, FP, FN, Miss, timepoint_x):
+    def get_ll_full_error(self, FP, FN, Miss):
         par = self.parameters[self.assignment]
         # 20240626 Liting: commented out to include missing rate
         '''
@@ -76,15 +83,25 @@ class CRP_errors_learning(CRP):
         # Adjusted for missing rate
         # NEED: Think about how to calculate the likelihood of missing rate
         ll_full = 0
+        ll_FN = np.empty((self.data.shape[0], self.data.shape[1]))
+        ll_FP = np.empty((self.data.shape[0], self.data.shape[1]))
+        ll_Miss = np.empty((self.data.shape[0], self.data.shape[1]))
         for i in range(len(FP)):
             # find index of cells in current time point
-            idx = np.where(timepoint_x == i)[0]
+            idx = np.where(self.timepoint_x == i)[0]
             cl_data = self.data[idx, :]
             cl_par = par[idx, :]
-            ll_FN =   (cl_par * (1 - FN[i] - Miss[i]) ** cl_data * FN[i] ** (1 - cl_data))
-            ll_FP =  ((1 - cl_par) * (1 - FP[i] - Miss[i]) ** (1 - cl_data) * FP[i] ** cl_data)
-            ll_Miss = Miss[i] * 1  # Likelihood of data being missing
-            ll_full += np.log(ll_FN + ll_FP + ll_Miss)
+            #ll_FN_ =   (cl_par * (1 - FN[i] - Miss[i]) ** cl_data * FN[i] ** (1 - cl_data))
+            #ll_FP_ =  ((1 - cl_par) * (1 - FP[i] - Miss[i]) ** (1 - cl_data) * FP[i] ** cl_data)
+            #ll_Miss_ = Miss[i] * 1  # Likelihood of data being missing
+            ll_FN_ =   (cl_par * (1 - FN[i]) ** cl_data * FN[i] ** (1 - cl_data))
+            ll_FP_ =  ((1 - cl_par) * (1 - FP[i]) ** (1 - cl_data) * FP[i] ** cl_data)
+            ll_FN[idx, ] = ll_FN_
+            ll_FP[idx, ] = ll_FP_
+            #ll_Miss[idx, ] = ll_Miss_
+        
+        #ll_full = np.log(ll_FN + ll_FP + ll_Miss)
+        ll_full = np.log(ll_FN + ll_FP)
         return bn.nansum(ll_full)
 
 
@@ -124,8 +141,8 @@ class CRP_errors_learning(CRP):
             .logpdf(old_error, a_rev, b_rev, loc=new_error, scale=std)
         
         # 20240626 Liting: get new error list
-        new_errors = old_errors
-        new_errors[i] = new_errors
+        new_errors = copy.deepcopy(old_errors)
+        new_errors[i] = new_error
         # Calculate likelihood
         # 20240626 Liting: Added missing rate 
         if error_type == 'FP':
@@ -145,9 +162,9 @@ class CRP_errors_learning(CRP):
         A = new_ll + new_prior - old_ll - old_prior + old_p_target - new_p_target
 
         if np.log(np.random.random()) < A:
-            return new_error, [1, 0]
+            return new_errors, [1, 0]
 
-        return old_error, [0, 1]
+        return old_errors, [0, 1]
 
 
 if __name__ == '__main__':
