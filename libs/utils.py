@@ -165,6 +165,7 @@ def get_mean_hierarchy_assignment(assignments, params_full):
                 step_idx = np.argwhere(same_cluster).flatten()
 
             for step in step_idx:
+                # NEED: sometimes give index error
                 params[i] += params_full[step][cl_ids[step]]
             params[i] /= step_idx.size
         # If not, take parameters from all posterior samples
@@ -229,7 +230,8 @@ def _get_latents_posterior_chain(result, data):
 
 
 def _get_posterior_avg(data):
-    return np.mean(data), np.std(data)
+    # 20240703 Liting: get mean and sd for each time point
+    return np.mean(data, axis = 0), np.std(data, axis = 0)
 
 
 def get_latents_point(results, est, data, single_chains=False):

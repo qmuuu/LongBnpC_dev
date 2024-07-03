@@ -182,9 +182,9 @@ def plot_raw_data(data_in, data_raw_in=pd.DataFrame(), out_file=None,
 
 def plot_traces(results, out_file=None, burn_in=0):
     no_rows = 6
-
+    print("in plot traces", len(results), results[0].keys())
     if 'FP' in results[0].keys():
-        no_rows += 2
+        no_rows += (2*results[0]['FP'].shape[1])
         errors = True
     else:
         errors = False
@@ -201,9 +201,16 @@ def plot_traces(results, out_file=None, burn_in=0):
         1: fig.add_subplot(gs[1, 0]),
         2: fig.add_subplot(gs[2:4, 0]),
         3: fig.add_subplot(gs[4:6, 0])}
+    ax_id = 4
+    gs_id = 6
     if errors:
-        ax[4] = fig.add_subplot(gs[6, 0])
-        ax[5] = fig.add_subplot(gs[7, 0])
+        for i in range(results[0]['FP'].shape[1]):
+            ax[ax_id] = fig.add_subplot(gs[gs_id, 0])
+            ax_id += 1
+            gs_id += 1
+            ax[ax_id] = fig.add_subplot(gs[gs_id, 0])
+            ax_id += 1
+            gs_id += 1
 
     for chain, chain_result in enumerate(results):
         try:
@@ -220,14 +227,14 @@ def plot_traces(results, out_file=None, burn_in=0):
 
     step_no = chain_result['ML'].size + 1
     if psrf:
-        ax[6] = fig.add_subplot(gs[no_rows - 1, 0])
+        ax[gs_id] = fig.add_subplot(gs[no_rows - 1, 0])
         psrf_val = np.full(step_no, np.nan)
         for step_i, psrf_i in chain_result['PSRF']:
             psrf_val[step_i] = psrf_i
-        ax[6].plot(np.arange(step_no), psrf_val, 'rx')
-        ax[6].set_ylabel('PSRF', fontsize=LABEL_FONTSIZE)
-        ax[6].axhline(1, ls='-', c='black')
-        ax[6].axhline(chain_result['PSRF_cutoff'], ls=':', c='red')
+        ax[gs_id].plot(np.arange(step_no), psrf_val, 'rx')
+        ax[gs_id].set_ylabel('PSRF', fontsize=LABEL_FONTSIZE)
+        ax[gs_id].axhline(1, ls='-', c='black')
+        ax[gs_id].axhline(chain_result['PSRF_cutoff'], ls=':', c='red')
 
     # Add x-axis label and tick labels below last plot, remove from others
     tick_dist = int(np.floor(step_no // 10 / 100) * 100)
@@ -274,18 +281,37 @@ def _add_chain_traces(data, ax, color, alpha=0.4, std_fkt=2.576):
     ax[2].set_ylabel('Log a posteriori', fontsize=LABEL_FONTSIZE)
     ax[3].set_ylabel('Log likelihood', fontsize=LABEL_FONTSIZE)
 
+    ax_id = 4
     if 4 in ax:
         FN_mean, FN_std = ut._get_posterior_avg(data['FN'][burn_in:])
+        '''
         ax[4].plot(data['FN'].round(4), color, alpha=alpha)
         # ax[4].set_ylim(FN_mean - std_fkt * FN_std, FN_mean + std_fkt * FN_std)
         ax[4].set_ylabel('FN error', fontsize=LABEL_FONTSIZE)
         ax[4].axhline(FN_mean, ls='--', c=color)
+        '''
+        # 20240701 liting: adjusted code to plot errors for each time in the sample plot
+        for time_idx in range(data['FN'].shape[1]):
+            ax[ax_id].plot(data['FN'][:, time_idx].round(4), color, alpha=alpha)
+            # ax[4].set_ylim(FN_mean - std_fkt * FN_std, FN_mean + std_fkt * FN_std)
+            ax[ax_id].set_ylabel(f'FN time {time_idx}\nerror', fontsize=LABEL_FONTSIZE)
+            ax[ax_id].axhline(FN_mean[time_idx], ls='--', c=color)
+            ax_id += 1
     if 5 in ax:
         FP_mean, FP_std = ut._get_posterior_avg(data['FP'][burn_in:])
+        '''
         ax[5].plot(data['FP'].round(4), color, alpha=alpha)
         # ax[5].set_ylim(FP_mean - std_fkt * FP_std, FP_mean + std_fkt * FP_std)
         ax[5].set_ylabel('FP error', fontsize=LABEL_FONTSIZE)
         ax[5].axhline(FP_mean, ls='--', c=color)
+        '''
+        # 20240701 liting: adjusted code to plot errors for each time in the sample plot
+        for time_idx in range(data['FP'].shape[1]):
+            ax[ax_id].plot(data['FP'][:, time_idx].round(4), color, alpha=alpha)
+            # ax[4].set_ylim(FN_mean - std_fkt * FN_std, FN_mean + std_fkt * FN_std)
+            ax[ax_id].set_ylabel(f'FP time {time_idx}\nerror', fontsize=LABEL_FONTSIZE)
+            ax[ax_id].axhline(FP_mean[time_idx], ls='--', c=color)
+            ax_id += 1
 
     if burn_in > 0:
         for ax_id, ax_obj in ax.items():
@@ -372,7 +398,7 @@ def stdout_fig(fig, out_file, dpi=300):
         plt.show()
     else:
         try:
-            fig.subplots_adjust(left=0.1, bottom=0.1, right=0.9, top=0.9)
+            fig.subplots_adjust(left=0.12, bottom=0.1, right=0.9, top=0.9)
         except AttributeError:
             pass
         fig.savefig(out_file, dpi=dpi)

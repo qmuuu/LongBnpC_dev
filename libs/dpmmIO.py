@@ -198,7 +198,6 @@ def _infer_results(args, results, data):
     args.PSRF = ut.get_lugsail_batch_means_est(
         [(i['ML'], i['burn_in']) for i in results]
     )
-    print("PSRF", args.PSRF)
     args.steps = [i['ML'].size for i in results]
     if args.single_chains:
         inferred = {i: {} for i in range(args.chains)}
@@ -391,7 +390,7 @@ def show_latents(data):
     for i, data_chain in data.items():
         for est, data_est in data_chain.items():
             print(f'\nInferred latent variables\t--\tchain {i:0>2} - {est}'
-                f'\n\tCRP a_0:\t{get_latent_str(data_est["a"])}')
+                f'\n\tCRP a_0: {get_latent_str(data_est["a"])}')
             for error in ['FP', 'FN']:
                 if data_est[error]:
                     geno_error = f'{error}_geno'
@@ -402,28 +401,46 @@ def show_latents(data):
                         error_model = get_latent_str(data_est[error], 3)
                         error_geno = get_latent_str(data_est[geno_error], 3)
                     print(f'\t{error} (model|genotypes): '
-                        f'{error_model}\t|\t{error_geno}')
+                        f'{error_model} | {error_geno}')
 
 
 
 def get_latent_str(latent_var, dec=1, dtype='f'):
     if latent_var == None:
         return 'not inferred'
-
     fmt_str = '{:.' + str(int(dec)) + dtype + '}'
-    try:
-        return (fmt_str + ' ' * (dec - 1) + ' +- ' + fmt_str).format(*latent_var)
-    except TypeError:
-        return fmt_str.format(latent_var)
+    # 20240703 Liting: Adjusted code for list of FP, FN for different timepoint
+    # for single scalar variable
+    if np.isscalar(latent_var):
+        try:
+            return (fmt_str + ' ' * (dec - 1) + ' +- ' + fmt_str).format(*latent_var)
+        except TypeError:
+            return fmt_str.format(latent_var)
+    elif np.isscalar(latent_var[0]):
+        try:
+            return (fmt_str + ' ' * (dec - 1) + ' +- ' + fmt_str).format(*latent_var)
+        except TypeError:
+            return fmt_str.format(latent_var)
+    elif isinstance(latent_var[0], np.ndarray) and isinstance(latent_var[1], np.ndarray):
+        # Handle array variables
+        try:
+            formatted_pairs = [
+                (fmt_str + ' +- ' + fmt_str).format(latent_var[0][i], latent_var[1][i])
+                for i in range(len(latent_var[0]))
+            ]
+            return ', '.join(formatted_pairs)
+        except Exception as e:
+            print(f"Error in formatting: {e}")
+        
 
 
 # ------------------------------------------------------------------------------
 # OUTPUT - DATA
 # ------------------------------------------------------------------------------
 
-def save_run(inferred, args, out_dir, names):
+def save_run(inferred, args, times, out_dir, names):
     save_config(args, out_dir)
-    save_errors(inferred, args, out_dir)
+    save_errors(inferred, args, times, out_dir)
     save_assignments(inferred, args, out_dir)
     save_geno(inferred, out_dir, names[1])
 
@@ -453,21 +470,23 @@ def save_config(args, out_dir, out_file='args.txt'):
             f.write(f'{key}: {val}\n')
 
 
-def save_errors(data, args, out_dir):
+def save_errors(data, args, times, out_dir):
+    # 202040703 Liting: Adjust code to ouput a list of error estimation for each time point
     idx = np.arange(len(args.estimator) * args.chains)
-    cols = ['chain', 'estimator', 'FN_model', 'FN_data', 'FP_model', 'FP_data']
+    cols = ['chain', 'estimator', 'FN_data', 'FP_data']
+    for i in range(times):
+        cols.append("FN_model_" + str(i))
+        cols.append("FP_model_" + str(i))
+
     df = pd.DataFrame(index=idx, columns=cols)
-    print("in save errors")
     i = 0
     for chain, data_chain in data.items():
-        print(chain)
         for est, data_est in data_chain.items():
             if est == 'posterior':
-                print(data_est['FN'])
-                errors = [f'{data_est["FN"][0]:.4f}+-{data_est["FN"][1]:.4f}',
-                    data_est['FN_geno'].round(4),
-                    f'{data_est["FP"][0]:.8f}+-{data_est["FP"][1]:.8f}',
-                    data_est['FP_geno'].round(8)]
+                errors = [data_est['FN_geno'].round(4), data_est['FP_geno'].round(8)]
+                for j in range(times):
+                    errors.append(f'{data_est["FN"][0][j]:.4f}+-{data_est["FN"][1][j]:.4f}')
+                    errors.append(f'{data_est["FP"][0][j]:.4f}+-{data_est["FP"][1][j]:.4f}')
             else:
                 errors = [data_est['FN'].round(4), data_est['FN_geno'].round(4),
                     data_est['FP'].round(8), data_est['FP_geno'].round(8)]

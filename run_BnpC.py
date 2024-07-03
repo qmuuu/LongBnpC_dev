@@ -221,7 +221,7 @@ def parse_args():
 # INIT AND OUTPUT FUNCTIONS
 # ------------------------------------------------------------------------------
 
-def generate_output(args, results, data_raw, names):
+def generate_output(args, results, times, data_raw, names):
     out_dir = io._get_out_dir(args)
     inferred = io._infer_results(args, results, data_raw)
     if args.verbosity > 0:
@@ -230,7 +230,7 @@ def generate_output(args, results, data_raw, names):
         io.show_latents(inferred)
         print(f'\nWriting output to: {out_dir}\n')
 
-    io.save_run(inferred, args, out_dir, names)
+    io.save_run(inferred, args, times, out_dir, names)
 
     if args.true_clusters:
         true_assign = io.load_txt(args.true_clusters)
@@ -311,7 +311,7 @@ def main(args):
     results = mcmc.get_results() 
     args.time.append(datetime.now())
     #generate_output(args, results, data, data_names)
-    generate_output(args, results, data, (row_names, col_names, timepoint_x))
+    generate_output(args, results, args.numTimes, data, (row_names, col_names, timepoint_x))
 
 
 if __name__ == '__main__':
