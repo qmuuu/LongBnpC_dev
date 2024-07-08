@@ -261,8 +261,6 @@ def generate_output(args, results, times, data_raw, names):
 
 def main(args):
     io.process_sim_folder(args, suffix='')
-    #data, data_names = io.load_data(
-    #Bhavya Changes here //unpacking return values of load_data function
     data, timepoint_x, miss, (row_names, col_names) = io.load_data(
         args.input, transpose=args.transpose, get_names=True
     )

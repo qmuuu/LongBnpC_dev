@@ -137,8 +137,6 @@ def get_mean_hierarchy_assignment(assignments, params_full):
     steps = assignments.shape[0]
     assign = _get_MPEAR(assignments)
     clusters = np.unique(assign)
-    print(assignments)
-    print(clusters)
     params = np.zeros((clusters.size, params_full.shape[2]))
     for i, cluster in enumerate(clusters):
         cells_cl_idx = assign == cluster
@@ -170,6 +168,7 @@ def get_mean_hierarchy_assignment(assignments, params_full):
                 try:
                     params[i] += params_full[step][cl_ids[step]]
                 except IndexError as e:
+                    print(e)
                     print("cl_ids", cl_ids)
                     print("assignments shape", assignments.shape)
                     print(assignments)
