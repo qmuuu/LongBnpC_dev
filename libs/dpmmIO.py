@@ -95,10 +95,20 @@ def load_data(in_file, transpose=True, get_names=False):
     df.replace(3, np.nan, inplace=True)
     # replace homozygos mutations with heterozygos
     df.replace(2, 1, inplace=True)
+    data = df.values
+    # 20240708 Liting: get mean missing rate and sd
+    miss_list = []
+    for i in np.unique(timepoint_x):
+        idx = np.where(timepoint_x == i)
+        cl_x = data[idx, :]
+        miss = np.isnan(cl_x).sum()/cl_x.size
+        miss_list.append(miss)
+    miss_mean = np.mean(miss_list)
+    miss_std = np.std(miss_list)
     if get_names:
-        return df.values, timepoint_x, np.unique(timepoint_x), (df.index.values, df.columns.values)
+        return df.values, timepoint_x, (miss_mean, miss_std), (df.index.values, df.columns.values)
     else:
-        return df.values, timepoint_x, np.unique(timepoint_x)
+        return df.values, timepoint_x, (miss_mean, miss_std)
 
 def load_txt(path):
     try:
@@ -391,15 +401,18 @@ def show_latents(data):
         for est, data_est in data_chain.items():
             print(f'\nInferred latent variables\t--\tchain {i:0>2} - {est}'
                 f'\n\tCRP a_0: {get_latent_str(data_est["a"])}')
-            for error in ['FP', 'FN']:
+            for error in ['FP', 'FN', 'Miss']:
                 if data_est[error]:
                     geno_error = f'{error}_geno'
                     if error == 'FP':
                         error_model = get_latent_str(data_est[error], 1, 'E')
                         error_geno = get_latent_str(data_est[geno_error], 1, 'E')
-                    else:
+                    elif error == 'FN':
                         error_model = get_latent_str(data_est[error], 3)
                         error_geno = get_latent_str(data_est[geno_error], 3)
+                    else: 
+                        error_model = get_latent_str(data_est[error], 3)
+                        error_geno = -1
                     print(f'\t{error} (model|genotypes): '
                         f'{error_model} | {error_geno}')
 
@@ -477,6 +490,7 @@ def save_errors(data, args, times, out_dir):
     for i in range(times):
         cols.append("FN_model_" + str(i))
         cols.append("FP_model_" + str(i))
+        cols.append("Miss_model_" + str(i))
 
     df = pd.DataFrame(index=idx, columns=cols)
     i = 0
@@ -487,9 +501,13 @@ def save_errors(data, args, times, out_dir):
                 for j in range(times):
                     errors.append(f'{data_est["FN"][0][j]:.4f}+-{data_est["FN"][1][j]:.4f}')
                     errors.append(f'{data_est["FP"][0][j]:.4f}+-{data_est["FP"][1][j]:.4f}')
+                    errors.append(f'{data_est["Miss"][0][j]:.4f}+-{data_est["Miss"][1][j]:.4f}')
             else:
-                errors = [data_est['FN'].round(4), data_est['FN_geno'].round(4),
-                    data_est['FP'].round(8), data_est['FP_geno'].round(8)]
+                errors = [data_est['FN_geno'].round(4), data_est['FP_geno'].round(8)]
+                for j in range(times):
+                    errors.append(f'{data_est["FN"][0][j]:.4f}')
+                    errors.append(f'{data_est["FP"][0][j]:.4f}')
+                    errors.append(f'{data_est["Miss"][0][j]:.4f}')
                     
             df.iloc[i] = [chain, est] + errors
             i += 1

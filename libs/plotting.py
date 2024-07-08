@@ -182,9 +182,8 @@ def plot_raw_data(data_in, data_raw_in=pd.DataFrame(), out_file=None,
 
 def plot_traces(results, out_file=None, burn_in=0):
     no_rows = 6
-    print("in plot traces", len(results), results[0].keys())
     if 'FP' in results[0].keys():
-        no_rows += (2*results[0]['FP'].shape[1])
+        no_rows += (3 * results[0]['FP'].shape[1])
         errors = True
     else:
         errors = False
@@ -211,7 +210,9 @@ def plot_traces(results, out_file=None, burn_in=0):
             ax[ax_id] = fig.add_subplot(gs[gs_id, 0])
             ax_id += 1
             gs_id += 1
-
+            ax[ax_id] = fig.add_subplot(gs[gs_id, 0])
+            ax_id += 1
+            gs_id += 1
     for chain, chain_result in enumerate(results):
         try:
             color = COLORS[chain]
@@ -311,6 +312,15 @@ def _add_chain_traces(data, ax, color, alpha=0.4, std_fkt=2.576):
             # ax[4].set_ylim(FN_mean - std_fkt * FN_std, FN_mean + std_fkt * FN_std)
             ax[ax_id].set_ylabel(f'FP time {time_idx}\nerror', fontsize=LABEL_FONTSIZE)
             ax[ax_id].axhline(FP_mean[time_idx], ls='--', c=color)
+            ax_id += 1
+    if 5 in ax:
+        Miss_mean, Miss_std = ut._get_posterior_avg(data['Miss'][burn_in:])
+        # 20240701 liting: adjusted code to plot errors for each time in the sample plot
+        for time_idx in range(data['Miss'].shape[1]):
+            ax[ax_id].plot(data['Miss'][:, time_idx].round(4), color, alpha=alpha)
+            # ax[4].set_ylim(FN_mean - std_fkt * FN_std, FN_mean + std_fkt * FN_std)
+            ax[ax_id].set_ylabel(f'Miss time {time_idx}\nerror', fontsize=LABEL_FONTSIZE)
+            ax[ax_id].axhline(Miss_mean[time_idx], ls='--', c=color)
             ax_id += 1
 
     if burn_in > 0:

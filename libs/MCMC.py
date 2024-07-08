@@ -63,7 +63,6 @@ class MCMC:
 
     def get_results(self):
         results = []
-        # ERROR: self.chains was empty
         for chain in self.chains:
             results.append(chain.get_result())
 
@@ -238,6 +237,7 @@ class Chain():
         # 20240629 Liting: Initial the result to be steps * number of time points 
         self.results['FN'] = np.empty((steps, self.model.num_times))
         self.results['FP'] = np.empty((steps, self.model.num_times))
+        self.results['Miss'] = np.empty((steps, self.model.num_times))
         self.results['assignments'] = np.zeros(
             (steps, self.model.cells_total), dtype=int
         )
@@ -259,6 +259,7 @@ class Chain():
         self.results['DP_alpha'][step] = self.model.DP_a
         self.results['FN'][step] = self.model.FN
         self.results['FP'][step] = self.model.FP
+        self.results['Miss'][step] = self.model.FP
         self.results['assignments'][step] = self.model.assignment
 
         #Bhavya Changes here
@@ -310,6 +311,7 @@ class Chain():
         self.results['DP_alpha'] = np.append(self.results['DP_alpha'], arr_new)
         self.results['FN'] = np.append(self.results['FN'], arr_new)
         self.results['FP'] = np.append(self.results['FP'], arr_new)
+        self.results['Miss'] = np.append(self.results['FP'], arr_new)
         self.results['assignments'] = np.append(self.results['assignments'],
             np.zeros((add_size, self.model.cells_total), int), axis=0
         )
@@ -323,8 +325,9 @@ class Chain():
         if self.learning_errors:
             io.show_MH_acceptance(self.MH_counter[3], 'FP')
             io.show_MH_acceptance(self.MH_counter[4], 'FN')
+            io.show_MH_acceptance(self.MH_counter[5], 'Miss')
 
-        self.MH_counter = np.zeros((5, 2))
+        self.MH_counter = np.zeros((6, 2))
 
 
     def do_step(self):
@@ -347,11 +350,11 @@ class Chain():
         self.MH_counter[0][0] += par_accepted
 
         if self.learning_errors and np.random.random() < self.mcmc['error_prob']:
-            #FP_declined, FN_declined, Miss_declined = self.model.update_error_rates()
-            FP_declined, FN_declined = self.model.update_error_rates()
+            FP_declined, FN_declined, Miss_declined = self.model.update_error_rates()
+            #FP_declined, FN_declined = self.model.update_error_rates()
             self.MH_counter[3] += FP_declined
             self.MH_counter[4] += FN_declined
-            #self.MH_counter[5] += Miss_declined
+            self.MH_counter[5] += Miss_declined
 
 
 # ------------------------------------------------------------------------------

@@ -213,7 +213,9 @@ class CRP:
     def _calc_ll(self, x, theta, time=[-1], flat=False):
         ll_FN = theta * self._Bernoulli_FN(x, time)
         ll_FP = (1 - theta) * self._Bernoulli_FP(x, time)
-        ll_full = np.log(ll_FN + ll_FP)
+        # 20240708 Liting: Add missing rate
+        ll_Missing = self._Missing(x, time)
+        ll_full = np.log(ll_FN + ll_FP + ll_Missing)
         if flat:
             return bn.nansum(ll_full)
         else:
@@ -223,7 +225,6 @@ class CRP:
     #def _Bernoulli_FN(self, x):
     #    return (1 - self.FN) ** x * self.FN ** (1 - x)
     
-    #Bhavya Changes here // Updated Bernoulli function to accept timepoint as a parameter
     def _Bernoulli_FN(self, x, time = [-1]):
         # 20240627 Liting: calculate the FN for all time points
         FN = np.empty((x.shape[0], x.shape[1]))
@@ -232,13 +233,13 @@ class CRP:
             for i in range(len(self.FN)):
                 idx = np.where(self.timepoint_x == i)[0]
                 cl_x = x[idx, : ]
-                temp = (1 - self.FN[i]) ** (1 - cl_x) * self.FN[i] ** cl_x
+                temp = (1 - self.FN[i] - self.Miss[i]) ** (cl_x) * self.FN[i] ** (1 - cl_x)
                 FN[idx, ] = temp
             return FN
         # for subset of cells
         for i in range(x.shape[0]):
             cl_x = x[i, :]
-            temp = (1 - self.FN[time[i]]) ** (1 - cl_x) * self.FN[time[i]] ** cl_x
+            temp = (1 - self.FN[time[i]] - self.Miss[time[i]]) **  (cl_x) * self.FN[time[i]] ** (1 - cl_x)
             FN[i, ] = temp
         return FN
 
@@ -253,15 +254,31 @@ class CRP:
             for i in range(len(self.FP)):
                 idx = np.where(self.timepoint_x == i)[0]
                 cl_x = x[idx, : ]
-                temp = (1 - self.FP[i]) ** (1 - cl_x) * self.FP[i] ** cl_x
+                temp = (1 - self.FP[i] - self.Miss[i]) ** (1 - cl_x) * self.FP[i] ** cl_x
                 FP[idx, ] = temp
             return FP
         # for subset of cells
         for i in range(x.shape[0]):
             cl_x = x[i, :]
-            temp = (1 - self.FP[time[i]]) ** (1 - cl_x) * self.FP[time[i]] ** cl_x
+            temp = (1 - self.FP[time[i]] - self.Miss[time[i]]) ** (1 - cl_x) * self.FP[time[i]] ** cl_x
             FP[i, ] = temp
         return FP
+    
+    # 20240708 Liting: Add function to calculate missing rate
+    def _Missing(self, x, time=[-1]):
+        Miss = np.ones((x.shape[0], x.shape[1]))
+        if np.array_equal(time, [-1]):
+            for i in range(len(self.Miss)):
+                idx = np.where(self.timepoint_x == i)[0]
+                cl_x = x[idx, :]
+                temp = np.where(np.isnan(cl_x), self.Miss[i], 1)
+                Miss[idx, ] = temp
+            return Miss
+        for i in range(x.shape[0]):
+            cl_x = x[i, :]
+            temp = np.where(np.isnan(cl_x), self.Miss[time[i]], 1)
+            Miss[i, ] = temp
+        return Miss
     
     # 20240627 Liting: Commented out, not being used. 
     # def _Bernoulli_mut(self, x, theta):
@@ -284,7 +301,9 @@ class CRP:
     def get_lpost_single_new_cluster(self):
         ll_FP = self._beta_mix_const[0] * self._Bernoulli_FP(self.data)
         ll_FN = self._beta_mix_const[1] * self._Bernoulli_FN(self.data)
-        ll_full = np.log(ll_FN + ll_FP)
+        # 20240708 Liting: add missing rate
+        ll_Miss = self._Missing(self.data)
+        ll_full = np.log(ll_FN + ll_FP + ll_Miss)
         return bn.nansum(ll_full, axis=1) + self.CRP_prior[-1]
 
 
@@ -412,15 +431,15 @@ class CRP:
 
         # Calculate the log likelihoods
         x = self.data[cells]
-        #Bhavya Changes here // Reading the last column value to get timepoint value
-        #timepoint_x = x[len(x) - 1]
         ll_FN = self._Bernoulli_FN(self.data[cells], self.timepoint_x[cells])
         ll_FP = self._Bernoulli_FP(self.data[cells], self.timepoint_x[cells])
+        # 20240708 Liting: Add missing rate
+        ll_miss = self._Missing(self.data[cells], self.timepoint_x[cells])
         new_ll = bn.nansum(
-            np.log(new_params * ll_FN + (1 - new_params) * ll_FP), axis=0
+            np.log(new_params * ll_FN + (1 - new_params) * ll_FP + ll_miss), axis=0
         )
         old_ll = bn.nansum(
-            np.log(old_params * ll_FN + (1 - old_params) * ll_FP), axis=0
+            np.log(old_params * ll_FN + (1 - old_params) * ll_FP + ll_miss), axis=0
         )
 
         # Calculate the priors
@@ -501,7 +520,6 @@ class CRP:
                 break
 
         # Get two random items from the cluster
-        # NEED: Comeback and check what cells are, swap the last and first value to the random
         obs_i_idx, obs_j_idx = np.random.choice(cells.size, size=2, replace=False)
         cells[0], cells[obs_i_idx] = cells[obs_i_idx], cells[0]
         cells[-1], cells[obs_j_idx] = cells[obs_j_idx], cells[-1]

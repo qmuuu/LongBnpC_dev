@@ -5,7 +5,7 @@ from datetime import datetime
 
 from libs.MCMC import MCMC as MCMC
 import libs.dpmmIO as io
-
+import numpy as np
 # ------------------------------------------------------------------------------
 # ARGPARSER
 # ------------------------------------------------------------------------------
@@ -263,7 +263,7 @@ def main(args):
     io.process_sim_folder(args, suffix='')
     #data, data_names = io.load_data(
     #Bhavya Changes here //unpacking return values of load_data function
-    data, timepoint_x, unique_time, (row_names, col_names) = io.load_data(
+    data, timepoint_x, miss, (row_names, col_names) = io.load_data(
         args.input, transpose=args.transpose, get_names=True
     )
     print("data shape", data.shape)
@@ -282,7 +282,7 @@ def main(args):
             data, timepoint_x, DP_alpha=args.DPa_prior, param_beta=args.param_prior,
             FP_mean=args.falsePositive_mean, FP_sd=args.falsePositive_std,
             FN_mean=args.falseNegative_mean, FN_sd=args.falseNegative_std,
-            Miss_mean=args.missingRate_mean, Miss_sd=args.missingRate_std,
+            Miss_mean=miss[0], Miss_sd=miss[1],
             num_times=args.numTimes
         )
 

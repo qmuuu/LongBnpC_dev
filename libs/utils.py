@@ -137,7 +137,8 @@ def get_mean_hierarchy_assignment(assignments, params_full):
     steps = assignments.shape[0]
     assign = _get_MPEAR(assignments)
     clusters = np.unique(assign)
-
+    print(assignments)
+    print(clusters)
     params = np.zeros((clusters.size, params_full.shape[2]))
     for i, cluster in enumerate(clusters):
         cells_cl_idx = assign == cluster
@@ -165,8 +166,13 @@ def get_mean_hierarchy_assignment(assignments, params_full):
                 step_idx = np.argwhere(same_cluster).flatten()
 
             for step in step_idx:
-                # NEED: sometimes give index error
-                params[i] += params_full[step][cl_ids[step]]
+                # NEED: the original code has the same error
+                try:
+                    params[i] += params_full[step][cl_ids[step]]
+                except IndexError as e:
+                    print("cl_ids", cl_ids)
+                    print("assignments shape", assignments.shape)
+                    print(assignments)
             params[i] /= step_idx.size
         # If not, take parameters from all posterior samples
         else:
@@ -199,6 +205,8 @@ def _concat_chain_results(results):
     MAP = np.concatenate([i['MAP'][i['burn_in']:] for i in results])
     FN = np.concatenate([i['FN'][i['burn_in']:] for i in results])
     FP = np.concatenate([i['FP'][i['burn_in']:] for i in results])
+    # 20240708 Liting: Add missing rate
+    Miss = np.concatenate([i['Miss'][i['burn_in']:] for i in results])
     # Fill clusters not used by all chains with zeros
     params = [i['params'] for i in results]
     cl_max = np.max([i.shape[1] for i in params])
@@ -208,7 +216,7 @@ def _concat_chain_results(results):
     par = np.concatenate(params)
 
     return {'assignments': assign, 'params': par, 'DP_alpha': a, 'FN': FN,
-        'FP': FP, 'burn_in': 0, 'ML': ML, 'MAP': MAP}
+        'FP': FP, 'Miss': Miss, 'burn_in': 0, 'ML': ML, 'MAP': MAP}
 
 
 def _get_latents_posterior_chain(result, data):
@@ -219,13 +227,14 @@ def _get_latents_posterior_chain(result, data):
     a = _get_posterior_avg(result['DP_alpha'][burn_in:])
     FN = _get_posterior_avg(result['FN'][burn_in:])
     FP = _get_posterior_avg(result['FP'][burn_in:])
-    print("_get_latents_posterior_chain FP FN", FP, FN)
+    # 20240708 Liting: Add missing rate
+    Miss = _get_posterior_avg(result['Miss'][burn_in:])
     FN_geno = ((geno.T.values.round() == 1) & (data == 0)).sum() \
         / geno.values.round().sum()
     FP_geno = ((geno.T.values.round() == 0) & (data == 1)).sum() \
         / (1 - geno.values.round()).sum()
 
-    return {'a': a, 'assignment': assign, 'genotypes': geno, 'FN': FN, 'FP': FP,
+    return {'a': a, 'assignment': assign, 'genotypes': geno, 'FN': FN, 'FP': FP, 'Miss': Miss,
         'FN_geno': FN_geno, 'FP_geno': FP_geno}
 
 
@@ -255,6 +264,7 @@ def _get_latents_point_chain(result, est, data):
     a = result['DP_alpha'][step]
     FP = result['FP'][step]
     FN = result['FN'][step]
+    Miss = result['Miss'][step]
     assignment = result['assignments'][step].tolist()
 
     cl_names = np.unique(assignment)
@@ -268,7 +278,7 @@ def _get_latents_point_chain(result, est, data):
         / (1 - geno.values.round()).sum()
 
     return {'step': step, 'a': a, 'assignment': assignment, 'genotypes': geno,
-        'FN': FN, 'FP': FP, 'FN_geno': FN_geno, 'FP_geno': FP_geno}
+        'FN': FN, 'FP': FP, 'Miss': Miss,'FN_geno': FN_geno, 'FP_geno': FP_geno}
 
 
 def _write_to_file(file, content, attach=False):

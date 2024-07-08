@@ -63,20 +63,32 @@ class CRP_errors_learning(CRP):
     def get_lprior_full(self):
         return super().get_lprior_full() \
             + np.mean(self.FP_prior.logpdf(self.FP)) + np.mean(self.FN_prior.logpdf(self.FN)) \
-               # +  np.mean(self.Miss_prior.logpdf(self.Miss))
+               +  np.mean(self.Miss_prior.logpdf(self.Miss))
 
     def update_error_rates(self):
         self.FP, FP_count = self.MH_error_rates('FP')
         self.FN, FN_count = self.MH_error_rates('FN')
         # 20240626 Liting: add missing rate
-        #self.Miss, Miss_count = self.MH_error_rates('Miss')
-        return FP_count, FN_count#, Miss_count
+        self.Miss, Miss_count = self.MH_error_rates('Miss')
+        return FP_count, FN_count, Miss_count
 
 
     def get_ll_full_error(self, FP, FN, Miss):
         par = self.parameters[self.assignment]
         # 20240626 Liting: commented out to include missing rate
-        '''
+        ''' 
+        without missing 
+        (1 - FN) ** self.data # true positive 
+        FN ** (1 - self.data) # false negative 
+        (1 - FP) ** (1 - self.data) # true negative
+        FP ** self.data # false positive
+        ll_FN = par * (1 - FN) ** self.data * FN ** (1 - self.data)
+        ll_FP = (1 - par) * (1 - FP) ** (1 - self.data) * FP ** self.data
+        with missing rate
+        (1 - FN - Miss) ** self.data # true positive 
+        FN ** (1 - self.data) # false negative 
+        (1 - FP - Miss) ** (1 - self.data) # true negative
+        FP ** self.data # false positive
         ll_FN = par * (1 - FN) ** self.data * FN ** (1 - self.data)
         ll_FP = (1 - par) * (1 - FP) ** (1 - self.data) * FP ** self.data
         '''
@@ -91,17 +103,12 @@ class CRP_errors_learning(CRP):
             idx = np.where(self.timepoint_x == i)[0]
             cl_data = self.data[idx, :]
             cl_par = par[idx, :]
-            #ll_FN_ =   (cl_par * (1 - FN[i] - Miss[i]) ** cl_data * FN[i] ** (1 - cl_data))
-            #ll_FP_ =  ((1 - cl_par) * (1 - FP[i] - Miss[i]) ** (1 - cl_data) * FP[i] ** cl_data)
-            #ll_Miss_ = Miss[i] * 1  # Likelihood of data being missing
-            ll_FN_ =   (cl_par * (1 - FN[i]) ** cl_data * FN[i] ** (1 - cl_data))
-            ll_FP_ =  ((1 - cl_par) * (1 - FP[i]) ** (1 - cl_data) * FP[i] ** cl_data)
-            ll_FN[idx, ] = ll_FN_
-            ll_FP[idx, ] = ll_FP_
-            #ll_Miss[idx, ] = ll_Miss_
+            ll_FN[idx, ]=   (cl_par * (1 - FN[i] - Miss[i]) ** cl_data * FN[i] ** (1 - cl_data))
+            ll_FP[idx, ] =  ((1 - cl_par) * (1 - FP[i] - Miss[i]) ** (1 - cl_data) * FP[i] ** cl_data)
+            ll_Miss[idx, ] = np.where(np.isnan(cl_data), Miss[i], 1)
         
-        #ll_full = np.log(ll_FN + ll_FP + ll_Miss)
-        ll_full = np.log(ll_FN + ll_FP)
+        ll_full = np.log(ll_FN + ll_FP + ll_Miss)
+        #ll_full = np.log(ll_FN + ll_FP)
         return bn.nansum(ll_full)
 
 
