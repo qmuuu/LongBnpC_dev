@@ -3,7 +3,7 @@
 import numpy as np
 import bottleneck as bn
 from scipy.special import gamma, gammaln
-from scipy.stats import beta, truncnorm
+from scipy.stats import beta, truncnorm, mode
 from scipy.stats import gamma as gamma_fct
 
 
@@ -101,7 +101,21 @@ class CRP:
     def log_CRP_prior(n_i, n, a, dtype=np.float64):
         return np.log(n_i, dtype=dtype) - np.log(n - 1 + a, dtype=dtype)
 
+    def get_sci(self):
+        # get singleton cluster index
+        # Count the total number of clusters
+        total_clusters = len(self.cells_per_cluster)
+        # Count the number of singleton clusters
+        singleton_clusters = sum(1 for count in self.cells_per_cluster.values() if count == 1)
+        psc = 0 # percent of singleton cluster
+        # Calculate the percentage of singleton clusters
+        if total_clusters != 0:
+            psc = (singleton_clusters / total_clusters) 
+        # percent of cells in singleton cluster
+        pcc = singleton_clusters / self.cells_total
 
+        return 0.6 * psc + 0.4 * pcc
+    
     @staticmethod
     def _normalize_log_probs(probs):
         max_i = bn.nanargmax(probs)
@@ -165,7 +179,6 @@ class CRP:
             self.parameters = self._init_cl_params(mode)
         else:
             raise TypeError(f'Unsupported Initialization: {mode}')
-
         self.init_DP_prior()
 
 
@@ -215,7 +228,8 @@ class CRP:
         ll_FP = (1 - theta) * self._Bernoulli_FP(x, time)
         # 20240708 Liting: Add missing rate
         ll_Missing = self._Missing(x, time)
-        ll_full = np.log(ll_FN + ll_FP + ll_Missing)
+        #ll_full = np.log(ll_FN + ll_FP + ll_Missing)
+        ll_full =  np.log(ll_FN + ll_FP )
         if flat:
             return bn.nansum(ll_full)
         else:
@@ -233,13 +247,15 @@ class CRP:
             for i in range(len(self.FN)):
                 idx = np.where(self.timepoint_x == i)[0]
                 cl_x = x[idx, : ]
-                temp = (1 - self.FN[i] - self.Miss[i]) ** (cl_x) * self.FN[i] ** (1 - cl_x)
+                #temp = (1 - self.FN[i] - self.Miss[i]) ** (cl_x) * self.FN[i] ** (1 - cl_x)
+                temp = (1 - self.FN[i] ) ** (cl_x) * self.FN[i] ** (1 - cl_x)
                 FN[idx, ] = temp
             return FN
         # for subset of cells
         for i in range(x.shape[0]):
             cl_x = x[i, :]
-            temp = (1 - self.FN[time[i]] - self.Miss[time[i]]) **  (cl_x) * self.FN[time[i]] ** (1 - cl_x)
+            #temp = (1 - self.FN[time[i]] - self.Miss[time[i]]) **  (cl_x) * self.FN[time[i]] ** (1 - cl_x)
+            temp = (1 - self.FN[time[i]]) **  (cl_x) * self.FN[time[i]] ** (1 - cl_x)
             FN[i, ] = temp
         return FN
 
@@ -254,13 +270,15 @@ class CRP:
             for i in range(len(self.FP)):
                 idx = np.where(self.timepoint_x == i)[0]
                 cl_x = x[idx, : ]
-                temp = (1 - self.FP[i] - self.Miss[i]) ** (1 - cl_x) * self.FP[i] ** cl_x
+                #temp = (1 - self.FP[i] - self.Miss[i]) ** (1 - cl_x) * self.FP[i] ** cl_x
+                temp = (1 - self.FP[i] ) ** (1 - cl_x) * self.FP[i] ** cl_x
                 FP[idx, ] = temp
             return FP
         # for subset of cells
         for i in range(x.shape[0]):
             cl_x = x[i, :]
-            temp = (1 - self.FP[time[i]] - self.Miss[time[i]]) ** (1 - cl_x) * self.FP[time[i]] ** cl_x
+            #temp = (1 - self.FP[time[i]] - self.Miss[time[i]]) ** (1 - cl_x) * self.FP[time[i]] ** cl_x
+            temp = (1 - self.FP[time[i]]) ** (1 - cl_x) * self.FP[time[i]] ** cl_x
             FP[i, ] = temp
         return FP
     
@@ -287,23 +305,97 @@ class CRP:
     # 20240627 Liting: Commented out, not being used. 
     # def _Bernoulli_wt(self, x, theta):
     #     return (1 - x) * (theta * self.FN + (1 - theta) * (1 - self.FP))
-
-
-    def get_lpost_single(self, cell_id, cl_ids):
+ 
+    
+    def get_lpost_single0(self, cell_id, cl_ids):
         # 20240627 Liting: Modified to take time as input
         time = self.timepoint_x[cell_id]
         ll_single = self._calc_ll(self.data[[cell_id]], self.parameters[cl_ids], [time])
         cl_size = np.fromiter(self.cells_per_cluster.values(), dtype=int)
         lprior = self.CRP_prior[cl_size]
         return ll_single + lprior
+    
+    def get_lpost_single(self, cell_id, cl_ids):
+        time = self.timepoint_x[cell_id]
+        ll_single = self._calc_ll(self.data[[cell_id]], self.parameters[cl_ids], [time])
+        cl_size = np.fromiter(self.cells_per_cluster.values(), dtype=int)
+        lprior = self.CRP_prior[cl_size]
+        return ll_single + lprior
+    
 
+    '''
+    # still give too many clusters
+    def get_lpost_single(self, cell_id, cl_ids):
+        ll_single = self.calc_ll_single(self.data[[cell_id]], self.parameters[cl_ids])
+        cl_size = np.fromiter(self.cells_per_cluster.values(), dtype=int)
+        lprior = self.CRP_prior[cl_size]
+        return ll_single + lprior
+    
+    def calc_ll_single(self, x, theta, flat = False):
+        fp = 0.01
+        fn = 0.2
+        FN = (1 - fn) ** x * fn ** (1 - x)
+        FP = (1 - fp) ** (1 - x) * fp ** x
+        ll_FP = (1 - theta) * FP
+        ll_FN = theta * FN
+        ll_full =  np.log(ll_FN + ll_FP )
+        if flat:
+            return bn.nansum(ll_full)
+        else:
+            return bn.nansum(ll_full, axis=1)
+    '''
 
+    '''   
+    This approach make the result worse and takes much longer time 
+    def get_cls_mean_error(self, time, cl_ids):
+        mean_fp = []
+        mean_fn = []
+        curr_fp = self.FP[time]
+        curr_fn = self.FN[time]
+        for cl in cl_ids:
+            cells = np.argwhere(self.assignment == cl).flatten()
+            #print("cells", cells)
+            #print("timepoints", self.timepoint_x[cells])
+            fp = [self.FP[x] for x in self.timepoint_x[cells]]
+            fn = [self.FN[x] for x in self.timepoint_x[cells]]
+            fp.append(curr_fp)
+            fn.append(curr_fn)
+            mean_fp.append(np.median(fp))
+            mean_fn.append(np.median(fn))
+        return mean_fp, mean_fn
+    
+    def get_lpost_single1(self, cell_id, cl_ids):
+        # 20240627 Liting: Modified to take time as input
+        time = self.timepoint_x[cell_id]
+        mean_fp, mean_fn = self.get_cls_mean_error(time, cl_ids)
+        ll_single = self.calc_ll_single(self.data[[cell_id]], self.parameters[cl_ids], 
+                                        mean_fp, mean_fn)
+        cl_size = np.fromiter(self.cells_per_cluster.values(), dtype=int)
+        lprior = self.CRP_prior[cl_size]
+        return ll_single + lprior
+    
+    def calc_ll_single(self, x, theta, mean_fp, mean_fn, flat = False):
+        FN = np.empty((len(mean_fn), x.shape[1]))
+        FP = np.empty((len(mean_fp), x.shape[1]))
+        for i in range(len(mean_fn)):
+            FN[i, ] = (1 - mean_fn[i] ) ** (x) * mean_fn[i] ** (1 - x)
+            FP[i, ] = (1 - mean_fp[i] ) ** (1 - x) * mean_fp[i] ** (x)
+        ll_FP = (1 - theta) * FP
+        ll_FN = theta * FN
+        ll_full =  np.log(ll_FN + ll_FP )
+        if flat:
+            return bn.nansum(ll_full)
+        else:
+            return bn.nansum(ll_full, axis=1)
+
+    '''
     def get_lpost_single_new_cluster(self):
+        print(self._beta_mix_const[0], self._beta_mix_const[0])
         ll_FP = self._beta_mix_const[0] * self._Bernoulli_FP(self.data)
         ll_FN = self._beta_mix_const[1] * self._Bernoulli_FN(self.data)
         # 20240708 Liting: add missing rate
-        ll_Miss = self._Missing(self.data)
-        ll_full = np.log(ll_FN + ll_FP + ll_Miss)
+        #ll_Miss = self._Missing(self.data)
+        ll_full = np.log(ll_FN + ll_FP)# + ll_Miss)
         return bn.nansum(ll_full, axis=1) + self.CRP_prior[-1]
 
 
@@ -330,9 +422,15 @@ class CRP:
         """
         new_cl_post = self.get_lpost_single_new_cluster()
         test = np.zeros(self.cells_total)
+        print("update assignment with Gibbs============")
+        print(np.fromiter(self.cells_per_cluster.keys(), dtype=int).shape)
+        counter = 0
+        counter1 = 0
         for cell_id in np.random.permutation(self.cells_total):
             # Remove cell from cluster
             old_cluster = self.assignment[cell_id]
+            #print("cell", cell_id, "old cluster", old_cluster)
+            #print(self.cells_per_cluster)
             if self.cells_per_cluster[old_cluster] == 1:
                 del self.cells_per_cluster[old_cluster]
             else:
@@ -344,7 +442,8 @@ class CRP:
             # Probability of starting a new cluster
             post_new = new_cl_post[cell_id]
             # Sample new cluster assignment from posterior
-            probs_norm = self._normalize_log_probs(np.append(post_old, post_new))
+            sci = self.get_sci()
+            probs_norm = self._normalize_log_probs(np.append(post_old, post_new * (1 + sci)))
 
             cl_ids = np.append(cl_ids, -1)
             new_cluster_id = np.random.choice(cl_ids, p=probs_norm)
@@ -352,15 +451,26 @@ class CRP:
             # Start a new cluster
             test[cell_id] = probs_norm[-1]
             if new_cluster_id == -1:
-                new_cluster_id = self.init_new_cluster(cell_id)
+                # old cluster has more than one cell
+                if old_cluster in self.cells_per_cluster:
+                    new_cluster_id = self.init_new_cluster(cell_id)
+                    counter += 1
+                else: # old cluster has beend deleted
+                    # self.parameters[old_cluster] keep unchange
+                    # new_cluster_id = old_cluster
+                    # if singleton, has to join some of the clusters
+                    while new_cluster_id == -1:
+                        new_cluster_id = np.random.choice(cl_ids, p=probs_norm)   
             # Assign to cluster
             self.assignment[cell_id] = new_cluster_id
             try:
                 self.cells_per_cluster[new_cluster_id] += 1
             except KeyError:
                 self.cells_per_cluster[new_cluster_id] = 1
-
-
+            #print(self.cells_per_cluster)
+            #print("cell", cell_id, "new cluster", self.assignment[cell_id])
+        counter1 = np.fromiter(self.cells_per_cluster.keys(), dtype=int).shape[0]
+        print("start ", counter, "new cluster",  counter1)
     def init_new_cluster(self, cell_id):
         cl_id = self.get_empty_cluster()
         self.parameters[cl_id] = self._init_cl_params_new([cell_id])
@@ -430,18 +540,24 @@ class CRP:
             .logpdf(old_params, a_rev, b_rev, loc=new_params, scale=std)
 
         # Calculate the log likelihoods
-        x = self.data[cells]
         ll_FN = self._Bernoulli_FN(self.data[cells], self.timepoint_x[cells])
         ll_FP = self._Bernoulli_FP(self.data[cells], self.timepoint_x[cells])
         # 20240708 Liting: Add missing rate
-        ll_miss = self._Missing(self.data[cells], self.timepoint_x[cells])
+        #ll_miss = self._Missing(self.data[cells], self.timepoint_x[cells])
+        '''
         new_ll = bn.nansum(
             np.log(new_params * ll_FN + (1 - new_params) * ll_FP + ll_miss), axis=0
         )
         old_ll = bn.nansum(
             np.log(old_params * ll_FN + (1 - old_params) * ll_FP + ll_miss), axis=0
         )
-
+        '''
+        new_ll = bn.nansum(
+            np.log(new_params * ll_FN + (1 - new_params) * ll_FP ), axis=0
+        )
+        old_ll = bn.nansum(
+            np.log(old_params * ll_FN + (1 - old_params) * ll_FP ), axis=0
+        )
         # Calculate the priors
         if self.beta_prior_uniform:
             new_prior = 0
@@ -482,7 +598,9 @@ class CRP:
             )
 
         self.DP_a = max(1 + EPSILON, new_alpha)
+        print("Update DP_a", self.DP_a)
         self.init_DP_prior()
+        print(self.CRP_prior[-1])
 
 
 # ------------------------------------------------------------------------------
@@ -536,7 +654,6 @@ class CRP:
         accept, new_assignment, new_params = self.run_rg_nc(
             'split', cells, cluster_size_data, step_no
         )
-
         if accept:
             clust_new = self.get_empty_cluster()
             # Update parameters
@@ -559,7 +676,7 @@ class CRP:
     def do_merge_move(self, step_no=5):
         clusters = np.fromiter(self.cells_per_cluster.keys(), dtype=int)
         cluster_size = np.fromiter(self.cells_per_cluster.values(), dtype=int)
-        # Chose smaller clusters more often for split move
+        # Chose smaller clusters more often for merge move
         cluster_size_inv = 1 / cluster_size
         cluster_probs = cluster_size_inv / cluster_size_inv.sum()
         cl_i, cl_j = np.random.choice(
@@ -614,8 +731,10 @@ class CRP:
         # Jain, S., Neal, R. (2007) - Section 4.2: 4 or 5 (depending on move)
         # Do last scan to reach c_final and calculate Metropolis Hastings prob
         if move == 'split':
+            print("Doing split=============")
             return self._do_rg_split_MH(cells, size_data)
         else:
+            print("Doing merge=============")
             return self._do_rg_merge_MH(cells, size_data)
 
 
@@ -723,10 +842,17 @@ class CRP:
 
         if np.unique(self.rg_assignment).size == 1:
             return (False, [], [])
-
+        
+        # 20240718 Liting: don't accept if result in singleton clusters
+        unique_elements, counts = np.unique(self.rg_assignment, return_counts=True)
+        if np.any(counts == 1):
+            print("Resulting singleton clusters")
+            return (False, [], [])
         if np.log(np.random.random()) < A:
+            print("Accept split", A)
             return (True, self.rg_assignment, self.rg_params_split)
-
+        else:
+            print("Reject split", A)
         return (False, [], [])
 
 
@@ -737,8 +863,10 @@ class CRP:
             + self._get_ltrans_prob_size_ratio_merge(size_data)
 
         if np.log(np.random.random()) < A:
+            print("Accept merge", A)
             return (True, self.rg_params_merge)
-
+        else:
+            print("Reject merge", A)
         return (False, [])
 
 
@@ -838,7 +966,7 @@ class CRP:
         # Eq. 5 paper, first term
         norm = bn.nansum(1 / np.append(cluster_size, [n_i, n_j]))
         ltrans_prob_rev = np.log(1 / n_i / norm) + np.log(1 / n_j / norm)
-        return ltrans_prob_rev - ltrans_prob_size[0]
+        return ltrans_prob_rev - ltrans_prob_size[0] 
 
 
     def _get_ltrans_prob_size_ratio_merge(self, trans_prob_size):

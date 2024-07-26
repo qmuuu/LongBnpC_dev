@@ -264,8 +264,6 @@ def main(args):
     data, timepoint_x, miss, (row_names, col_names) = io.load_data(
         args.input, transpose=args.transpose, get_names=True
     )
-    print("data shape", data.shape)
-    print("timepoint", timepoint_x)
     if args.falsePositive[0] > 0 and args.falseNegative[0] > 0:
         args.error_update_prob = 0
         import libs.CRP as CRP

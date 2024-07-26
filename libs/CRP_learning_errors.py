@@ -36,6 +36,8 @@ class CRP_errors_learning(CRP):
         self.FN_sd = np.array([FN_sd * 0.5, FN_sd, FN_sd * 1.5])
 
         # 20240626 Liting: add missing rate
+        if Miss_sd == 0:
+            Miss_sd = 0.01
         Miss_trunc_a = (0 - Miss_mean) / Miss_sd
         Miss_trunc_b = (1 - Miss_mean) / Miss_sd
         self.Miss_prior = truncnorm(Miss_trunc_a, Miss_trunc_b, Miss_mean, Miss_sd)
@@ -62,14 +64,15 @@ class CRP_errors_learning(CRP):
 # multiply? or addition? or mean?
     def get_lprior_full(self):
         return super().get_lprior_full() \
-            + np.mean(self.FP_prior.logpdf(self.FP)) + np.mean(self.FN_prior.logpdf(self.FN)) \
-               +  np.mean(self.Miss_prior.logpdf(self.Miss))
+            + np.mean(self.FP_prior.logpdf(self.FP)) + np.mean(self.FN_prior.logpdf(self.FN)) #\
+              # +  np.mean(self.Miss_prior.logpdf(self.Miss))
 
     def update_error_rates(self):
         self.FP, FP_count = self.MH_error_rates('FP')
         self.FN, FN_count = self.MH_error_rates('FN')
         # 20240626 Liting: add missing rate
-        self.Miss, Miss_count = self.MH_error_rates('Miss')
+        #self.Miss, Miss_count = self.MH_error_rates('Miss')
+        Miss_count = [0, 0]
         return FP_count, FN_count, Miss_count
 
 
@@ -103,12 +106,14 @@ class CRP_errors_learning(CRP):
             idx = np.where(self.timepoint_x == i)[0]
             cl_data = self.data[idx, :]
             cl_par = par[idx, :]
-            ll_FN[idx, ]=   (cl_par * (1 - FN[i] - Miss[i]) ** cl_data * FN[i] ** (1 - cl_data))
-            ll_FP[idx, ] =  ((1 - cl_par) * (1 - FP[i] - Miss[i]) ** (1 - cl_data) * FP[i] ** cl_data)
-            ll_Miss[idx, ] = np.where(np.isnan(cl_data), Miss[i], 1)
+            #ll_FN[idx, ]=   (cl_par * (1 - FN[i] - Miss[i]) ** cl_data * FN[i] ** (1 - cl_data))
+            #ll_FP[idx, ] =  ((1 - cl_par) * (1 - FP[i] - Miss[i]) ** (1 - cl_data) * FP[i] ** cl_data)
+            ll_FN[idx, ]=   (cl_par * (1 - FN[i] ) ** cl_data * FN[i] ** (1 - cl_data))
+            ll_FP[idx, ] =  ((1 - cl_par) * (1 - FP[i] ) ** (1 - cl_data) * FP[i] ** cl_data)
+            #ll_Miss[idx, ] = np.where(np.isnan(cl_data), Miss[i], 1)
         
-        ll_full = np.log(ll_FN + ll_FP + ll_Miss)
-        #ll_full = np.log(ll_FN + ll_FP)
+        #ll_full = np.log(ll_FN + ll_FP + ll_Miss)
+        ll_full = np.log(ll_FN + ll_FP)
         return bn.nansum(ll_full)
 
 

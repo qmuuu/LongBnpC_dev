@@ -164,14 +164,11 @@ def get_mean_hierarchy_assignment(assignments, params_full):
                 step_idx = np.argwhere(same_cluster).flatten()
 
             for step in step_idx:
-                # NEED: the original code has the same error
-                try:
-                    params[i] += params_full[step][cl_ids[step]]
-                except IndexError as e:
-                    print(e)
-                    print("cl_ids", cl_ids)
-                    print("assignments shape", assignments.shape)
-                    print(assignments)
+                # BUG fix from the BnpC
+                all_cl_ids = np.append(np.unique(other_cl_id[step]), cl_ids[step])
+                rel_cl_id = np.argwhere(np.sort(all_cl_ids) == cl_ids[step])[0][0]
+                params[i] += params_full[step][rel_cl_id]
+
             params[i] /= step_idx.size
         # If not, take parameters from all posterior samples
         else:

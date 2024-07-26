@@ -259,7 +259,7 @@ class Chain():
         self.results['DP_alpha'][step] = self.model.DP_a
         self.results['FN'][step] = self.model.FN
         self.results['FP'][step] = self.model.FP
-        self.results['Miss'][step] = self.model.FP
+        self.results['Miss'][step] = self.model.Miss
         self.results['assignments'][step] = self.model.assignment
 
         #Bhavya Changes here
@@ -344,7 +344,8 @@ class Chain():
 
             if np.random.random() < self.mcmc['dpa_prob']:
                 self.model.update_DP_alpha()
-
+        print("===number of singleton cluster after this step:===")
+        print(sum(1 for count in self.model.cells_per_cluster.values() if count == 1))
         par_declined, par_accepted = self.model.update_parameters()
         self.MH_counter[0][1] += par_declined
         self.MH_counter[0][0] += par_accepted
@@ -355,7 +356,6 @@ class Chain():
             self.MH_counter[3] += FP_declined
             self.MH_counter[4] += FN_declined
             self.MH_counter[5] += Miss_declined
-
 
 # ------------------------------------------------------------------------------
 # RUN WITH STEP NUMBER
