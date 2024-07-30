@@ -1,0 +1,128 @@
+src_sim="/Users/liting/Desktop/projects/BnpC_ext/LongBnpC_dev/simulation/sim_par.py"
+src_tree="/Users/liting/Desktop/projects/BnpC_ext/LongBnpC_dev/simulation/gen_tree.py"
+convert="/Users/liting/Desktop/projects/BnpC_ext/LongBnpC_dev/simulation/convert2BnpC.py"
+
+# create tree with different time points
+mkdir time_3;
+for i in `seq 1 5`; do
+  echo "time_3 rep${i} ================="
+	mkdir time_3/rep${i}
+	python ${src_tree} -T 3 -t_v 15 7 0 -v1 0.2 -v2 0.4 -u 0.2 -B 0.3 -theta 0.2 -o time_3/rep${i}/tree.tsv
+	python ${src_sim} -a 0.01 -b 0.2 -m 0.2 -t 3 -mc 1.7 -aSD 0.02 -bSD 0.1 -mSD 0.1 -f time_3/rep${i}/tree.tsv -P time_3/rep${i}/input
+	python ${convert} -w time_3/rep${i}
+done
+
+mkdir time_4;
+for i in `seq 1 5`; do
+  echo "time_4 rep${i} ================="
+	mkdir time_4/rep${i}
+	python ${src_tree} -T 4 -t_v 9 6 3 0 -v1 0.2 -v2 0.4 -u 0.2 -B 0.3 -theta 0.2 -o time_4/rep${i}/tree.tsv
+	python ${src_sim} -a 0.01 -b 0.2 -m 0.2 -t 4 -mc 1.7 -aSD 0.02 -bSD 0.1 -mSD 0.1 -f time_4/rep${i}/tree.tsv -P time_4/rep${i}/input
+	python ${convert} -w time_4/rep${i}
+done
+
+mkdir time_5;
+for i in `seq 1 5`; do
+  echo "time_5 rep${i} ================="
+	mkdir time_5/rep${i}
+	python ${src_tree} -T 5 -t_v 12 9 6 3 0 -v1 0.2 -v2 0.4 -u 0.2 -B 0.3 -theta 0.2 -o time_5/rep${i}/tree.tsv
+	python ${src_sim} -a 0.01 -b 0.2 -m 0.2 -t 5 -mc 1.7 -aSD 0.02 -bSD 0.1 -mSD 0.1 -f time_5/rep${i}/tree.tsv -P time_5/rep${i}/input
+python ${convert} -w time_5/rep${i}
+done
+
+# vary mu  Threshold for multiple splits.
+for i in 0.1 0.3; do
+  mkdir mu_${i}
+  for j in `seq 1 5`; do
+    echo "mu_${i} rep${j} ================="
+    mkdir mu_${i}/rep${j}
+		python ${src_tree} -T 4 -t_v 9 6 3 0 -v1 0.2 -v2 0.4 -u ${i} -B 0.3 -theta 0.2 -o mu_${i}/rep${j}/tree.tsv
+    python ${src_sim} -a 0.01 -b 0.2 -m 0.2 -t 4 -mc 1.7 -aSD 0.02 -bSD 0.1 -mSD 0.1 -f mu_${i}/rep${j}/tree.tsv -P mu_${i}/rep${j}/input
+    python ${convert} -w mu_${i}/rep${j}
+    done
+done
+
+# vary alpha for mutation count
+for i in 3.5 5.1; do
+  mkdir mc_${i}
+  for j in `seq 1 5`; do
+    echo "mc_${i} rep${i} ================="
+    mkdir mc_${i}/rep${j}
+    cp time_4/rep${j}/tree.tsv mc_${i}/rep${j}/tree.tsv
+    python ${src_sim} -a 0.01 -b 0.2 -m 0.2 -t 4 -mc ${i} -aSD 0.02 -bSD 0.1 -mSD 0.1 -f mc_${i}/rep${j}/tree.tsv -P mc_${i}/rep${j}/input
+    python ${convert} -w mc_${i}/rep${j}
+    done
+done
+
+# vary fp rate
+for i in 0.001 0.05; do
+	mkdir fp_${i}
+	for j in `seq 1 5`; do
+echo "fp_${i} rep${i} ================="
+		mkdir fp_${i}/rep${j}
+		cp  time_4/rep${j}/tree.tsv fp_${i}/rep${j}/tree.tsv
+		python ${src_sim} -a ${i} -b 0.2 -m 0.2 -t 4 -mc 1.7 -aSD 0.02 -bSD 0.1 -mSD 0.1 -f fp_${i}/rep${j}/tree.tsv -P fp_${i}/rep${j}/input
+		python ${convert} -w fp_${i}/rep${j}
+		done
+done
+
+# vary fn rate
+for i in 0.1 0.3; do
+	mkdir fn_${i}
+  for j in `seq 1 5`; do
+		mkdir fn_${i}/rep${j}
+    echo "fn_${i} rep${i} ================="
+    cp  time_4/rep${j}/tree.tsv fn_${i}/rep${j}/tree.tsv
+    python ${src_sim} -a 0.01 -b ${i} -m 0.2 -t 4 -mc 1.7 -aSD 0.02 -bSD 0.1 -mSD 0.1 -f fn_${i}/rep${j}/tree.tsv -P fn_${i}/rep${j}/input
+    python ${convert} -w fn_${i}/rep${j}
+		done
+done
+
+# vary missing rate
+for i in 0.1 0.3; do
+  mkdir miss_${i}
+  for j in `seq 1 5`; do
+    mkdir miss_${i}/rep${j}
+    echo "miss_${i} rep${i} ================="
+    cp  time_4/rep${j}/tree.tsv miss_${i}/rep${j}/tree.tsv
+    python ${src_sim} -a 0.01 -b 0.2 -m $i -t 4 -mc 1.7 -aSD 0.02 -bSD 0.1 -mSD 0.1 -f miss_${i}/rep${j}/tree.tsv -P miss_${i}/rep${j}/input
+    python ${convert} -w miss_${i}/rep${j}
+		done
+done
+
+# vary FP variation
+for i in 0.01 0.03; do
+  mkdir fpSD_${i}
+  for j in `seq 1 5`; do
+    mkdir fpSD_${i}/rep${j}
+    echo "fpSD_${i} rep${i} ================="
+    cp  time_4/rep${j}/tree.tsv fpSD_${i}/rep${j}/tree.tsv
+    python ${src_sim} -a 0.01 -b 0.2 -m 0.2 -t 4 -mc 1.7 -aSD ${i} -bSD 0.1 -mSD 0.1 -f fpSD_${i}/rep${j}/tree.tsv -P fpSD_${i}/rep${j}/input
+    python ${convert} -w fpSD_${i}/rep${j}
+		done
+done
+
+# vary fn variation
+for i in 0.05 0.15; do
+  mkdir fnSD_${i}
+  for j in `seq 1 5`; do
+    mkdir fnSD_${i}/rep${j}
+    echo "fnSD_${i} rep${i} ================="
+    cp  time_4/rep${j}/tree.tsv fnSD_${i}/rep${j}/tree.tsv
+    python ${src_sim} -a 0.01 -b 0.2 -m 0.2 -t 4 -mc 1.7 -aSD 0.02 -bSD ${i} -mSD 0.1 -f fnSD_${i}/rep${j}/tree.tsv -P fnSD_${i}/rep${j}/input
+    python ${convert} -w fnSD_${i}/rep${j}
+		done
+done
+
+# vary missing rate variation
+for i in 0.05 0.15; do
+  mkdir missSD_${i}
+  for j in `seq 1 5`; do
+    mkdir missSD_${i}/rep${j}
+    echo "missSD_${i} rep${i} ================="
+    cp  time_4/rep${j}/tree.tsv missSD_${i}/rep${j}/tree.tsv
+    python ${src_sim} -a 0.01 -b 0.2 -m 0.2 -t 4 -mc 1.7 -aSD 0.02 -bSD 0.1 -mSD ${i} -f missSD_${i}/rep${j}/tree.tsv -P missSD_${i}/rep${j}/input
+		python ${convert} -w missSD_${i}/rep${j}
+	done
+done
+

@@ -15,6 +15,8 @@ def getInput(Dfile, cellsFile, outF):
     if time not in time2id:
       time2id[time] = id
       id += 1
+    if len(temp) == 1:
+      continue
     cells = temp[1].split(";")
     for c in cells:
       cell_time[int(c)] = time2id[time]
@@ -41,6 +43,8 @@ def getClusters(mutFile, cellsFile, outF):
     temp = line.rstrip().split()
     node = temp[0].split("_")[1]
     node2cell[node] = []
+    if len(temp) == 1:
+      continue
     cells = temp[1].split(";")
     for c in cells:
       node2cell[node].append(c)
@@ -64,5 +68,5 @@ def getClusters(mutFile, cellsFile, outF):
 parser = argparse.ArgumentParser()
 parser.add_argument('-w', '--wd', help = "working directory", default="./")
 args = parser.parse_args()
-getInput(args.wd + "/test.D.csv", args.wd + "/test.SNVcell.csv", args.wd + "/BnpC_ext_input.tsv")
-getClusters(args.wd + "/test.mut.csv", args.wd + "/test.SNVcell.csv", args.wd + "/true_cluster.tsv")
+getInput(args.wd + "/input.D.tsv", args.wd + "/input.SNVcell.tsv", args.wd + "/BnpC_ext_input.tsv")
+getClusters(args.wd + "/input.mut.tsv", args.wd + "/input.SNVcell.tsv", args.wd + "/true_cluster.tsv")

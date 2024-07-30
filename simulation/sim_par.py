@@ -75,6 +75,49 @@ def distribute_mutations(tree_file, mutation_constant, out_file):
     save_dict_to_file(mut_dict, out_file)
     return mut_dict, prev_mut + 1
 
+def allocate_items(prob_dict, total_items):
+  '''
+  allocate exact total items based on a list of probability
+  '''
+  # Extract categories and their probabilities
+  categories = list(prob_dict.keys())
+  prob = list(prob_dict.values())
+  # Calculate expected counts based on probabilities
+  expected_counts = [p * total_items for p in prob]
+
+  # Round the counts and calculate the initial sum
+  rounded_counts = [round(count) for count in expected_counts]
+  current_sum = sum(rounded_counts)
+  #print("rounded counts", rounded_counts)
+  # Adjust to ensure the sum of rounded counts is exactly 1000
+  while current_sum != total_items:
+    error = total_items - current_sum
+    adjustment_indices = sorted(
+      range(len(prob)), 
+      key=lambda i: (expected_counts[i] - rounded_counts[i]), 
+      reverse=(error > 0)
+    )
+    
+    for i in adjustment_indices:
+      if error > 0 and rounded_counts[i] < np.floor(expected_counts[i] + 0.5) + 1:
+        rounded_counts[i] += 1
+        current_sum += 1
+      elif error < 0 and rounded_counts[i] > np.ceil(expected_counts[i] - 0.5) - 1:
+        rounded_counts[i] -= 1
+        current_sum -= 1
+      if current_sum == total_items:
+          break
+
+  # Create a new dictionary to return the results
+  allocated_items = {categories[i]: rounded_counts[i] for i in range(len(categories))}
+  # Generate item numbers for each category
+  item_numbers = {}
+  start = 0
+  for category, count in allocated_items.items():
+    item_numbers[category] = np.array(list(range(start, start + count)))
+    start += count
+  return item_numbers
+
 def distribute_snv_cells(cell_numbers, tree_file, out_file):
     tree_dict = OrderedDict()
     with open(tree_file, "r") as f:
@@ -89,35 +132,29 @@ def distribute_snv_cells(cell_numbers, tree_file, out_file):
                 nodeID = int(fields[1])
                 perc = float(fields[4])
                 tree_dict.setdefault(timepoint, []).append(f"{nodeID};{perc}")
+                
     snv_cell_dict = {}
-    prev_cell = -1
     for i, (key, value) in enumerate(tree_dict.items()):
-        cell_num = int(cell_numbers[i])
-        total_cells = 0
+        prob_dict = {}
+        total_perc = 0
         for node in value:
             nodeID, perc = node.split(';')
-            nodeID = int(nodeID)
-            snv_cell_count = round(cell_num * float(perc))
-            
-            if snv_cell_count == 0:
-                prev_node_key = f"{int(key)}_{nodeID - 1}"
-                if prev_node_key in snv_cell_dict:
-                    prev_node_cells = snv_cell_dict[prev_node_key].split(";")
-                    snv_cell_dict[prev_node_key] = ";".join(prev_node_cells[:-1])
-                    snv_cell_dict[f"{int(key)}_{nodeID}"] = prev_node_cells[-1]
-                    snv_cell_count = 1
-            
-            total_cells += snv_cell_count
-            if total_cells > cell_num:
-                snv_cell_count -= total_cells - cell_num
-            
-            if snv_cell_count > 0:
-                cell_IDs = ";".join(map(str, range(prev_cell + 1, prev_cell + snv_cell_count + 1)))
-                prev_cell += snv_cell_count
-                snv_cell_dict[f"{int(key)}_{nodeID}"] = cell_IDs
-    
+            prob_dict[str(int(key)) + "_" + nodeID] = float(perc)
+            total_perc += float(perc)
+        for node in prob_dict:
+            prob_dict[node] = prob_dict[node]/total_perc
+        cell_dict = allocate_items(prob_dict, cell_numbers[i])
+        if i == 0:
+            snv_cell_dict = cell_dict
+        else:
+            for node in cell_dict:
+                cell_dict[node] += cell_numbers[i - 1]
+        snv_cell_dict.update(cell_dict)
+    for node in snv_cell_dict:
+        temp = ";".join(str(x) for x in snv_cell_dict[node])
+        snv_cell_dict[node] = temp
     save_dict_to_file(snv_cell_dict, out_file)
-    return snv_cell_dict, prev_cell + 1
+    return snv_cell_dict
 
 def add_missing_data(matrix, missing_rate):
     n, m = len(matrix), len(matrix[0])
@@ -178,13 +215,12 @@ def generate_mutation_matrix(mut_dict, snv_cell_dict, tree_file, num_cells, num_
         
         for cell in cells.split(";"):
             snv_cell_mutations[cell] = list(combined_mut_ids)
-    
+    print("num_cells", num_cells, "num_mutations", num_mutations)
     g_matrix = init_matrix(num_cells, num_mutations)
     for cell_id in range(num_cells):
         if str(cell_id) in snv_cell_mutations:
             for mut_id in snv_cell_mutations[str(cell_id)]:
                 g_matrix[cell_id][int(mut_id)] = 1
-    
     save_matrix(g_matrix, g_matrix_file)
     return g_matrix
 
@@ -192,13 +228,15 @@ def vary_fp_fn_mr(g_matrix, snv_cell_dict, assigned_FP, assigned_FN,
                   assigned_MR, d_matrix_file):
     timepoint_cells ={}
     for key, value in snv_cell_dict.items():
+        if value == '':
+            print("node with no cells")
+            continue
         time = key.split("_")[0]
         cells = value.split(";")
         if time not in timepoint_cells:
             timepoint_cells[time] = cells
         else:
             timepoint_cells[time].extend(cells)
-
     final_d_matrix = []
     for index, (timepoint, cells) in enumerate(timepoint_cells.items()):
         g_timepoint = [g_matrix[int(cell)] for cell in cells]
@@ -206,7 +244,6 @@ def vary_fp_fn_mr(g_matrix, snv_cell_dict, assigned_FP, assigned_FN,
         d_missing = add_missing_data(g_timepoint, mr_rate)
         d_matrix = add_false_pos_neg(d_missing, fp_rate, fn_rate)
         final_d_matrix.extend(d_matrix)
-    
     save_matrix(final_d_matrix, d_matrix_file)
 
 def sample_cells(num_timepoints):
@@ -234,13 +271,12 @@ def main():
     parser.add_argument('-b', '--beta', default=0.2, type=float, help='False negative rate.')
     parser.add_argument('-m', '--missing_rate', default=0.2, type=float, help='Missing rate in G.')
     parser.add_argument('-t', '--timepoints', default=3, type=int, help='Number of timepoints.')
-    parser.add_argument('-FPFN', '--fpfn', action='store_true', default=False, help='Flag to vary FP, FN, and MR.')
     parser.add_argument('-mc', '--mut_const', default=1.7, type=float, help='Mutation constant for Poisson distribution.')
     parser.add_argument('-f', '--tree_file', default="NA", help='The input tree structure file.')
     parser.add_argument('-P', '--prefix', default="NA", help='Prefix of output files.')
-    parser.add_argument('-aSD', '--fp_sd', default=0.02, help='False positive rate variation')
-    parser.add_argument('-bSD', '--fn_sd', default=0.1, help='False negative rate variation')
-    parser.add_argument('-mSD', '--miss_sd', default=0.1, help='missing rate variation')
+    parser.add_argument('-aSD', '--fp_sd', type = float, default=0.02, help='False positive rate variation')
+    parser.add_argument('-bSD', '--fn_sd', type = float, default=0.1, help='False negative rate variation')
+    parser.add_argument('-mSD', '--miss_sd',type = float, default=0.1, help='missing rate variation')
 
 
     args = parser.parse_args()
@@ -263,14 +299,14 @@ def main():
     cell_numbers = sample_cells(args.timepoints)
     print(cell_numbers)
     mut_dict, mut_count = distribute_mutations(args.tree_file, args.mut_const, 
-                                               args.prefix + ".mut.csv")
-    snv_cell_dict, cell_count = distribute_snv_cells(cell_numbers, args.tree_file, 
-                                                     args.prefix + ".SNVcell.csv")
-    g_matrix = generate_mutation_matrix(mut_dict, snv_cell_dict, args.tree_file, cell_count, 
-                             mut_count, args.prefix + ".G.csv")
+                                               args.prefix + ".mut.tsv")
+    snv_cell_dict = distribute_snv_cells(cell_numbers, args.tree_file, 
+                                                     args.prefix + ".SNVcell.tsv")
+    g_matrix = generate_mutation_matrix(mut_dict, snv_cell_dict, args.tree_file, sum(cell_numbers), 
+                             mut_count, args.prefix + ".G.tsv")
     assigned_FP, assigned_FN, assigned_MR = sample_fp_fn_mr(args.timepoints, args.alpha, args.beta,
                                                              args.missing_rate, args.fp_sd, args.fn_sd, args.miss_sd)
-    vary_fp_fn_mr(g_matrix, snv_cell_dict, assigned_FP, assigned_FN, assigned_MR, args.prefix + ".D.csv")
+    vary_fp_fn_mr(g_matrix, snv_cell_dict, assigned_FP, assigned_FN, assigned_MR, args.prefix + ".D.tsv")
 
 if __name__ == "__main__":
     main()
