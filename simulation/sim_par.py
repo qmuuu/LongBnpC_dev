@@ -132,7 +132,7 @@ def distribute_snv_cells(cell_numbers, tree_file, out_file):
                 nodeID = int(fields[1])
                 perc = float(fields[4])
                 tree_dict.setdefault(timepoint, []).append(f"{nodeID};{perc}")
-                
+    total_cell = 0           
     snv_cell_dict = {}
     for i, (key, value) in enumerate(tree_dict.items()):
         prob_dict = {}
@@ -148,7 +148,8 @@ def distribute_snv_cells(cell_numbers, tree_file, out_file):
             snv_cell_dict = cell_dict
         else:
             for node in cell_dict:
-                cell_dict[node] += cell_numbers[i - 1]
+                cell_dict[node] += total_cell
+        total_cell += cell_numbers[i]
         snv_cell_dict.update(cell_dict)
     for node in snv_cell_dict:
         temp = ";".join(str(x) for x in snv_cell_dict[node])

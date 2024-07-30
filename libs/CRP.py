@@ -112,9 +112,9 @@ class CRP:
         if total_clusters != 0:
             psc = (singleton_clusters / total_clusters) 
         # percent of cells in singleton cluster
-        pcc = singleton_clusters / self.cells_total
-
-        return 0.6 * psc + 0.4 * pcc
+        #pcc = singleton_clusters / self.cells_total
+        return psc
+        #return 0.6 * psc + 0.4 * pcc
     
     @staticmethod
     def _normalize_log_probs(probs):
@@ -229,7 +229,7 @@ class CRP:
         # 20240708 Liting: Add missing rate
         ll_Missing = self._Missing(x, time)
         #ll_full = np.log(ll_FN + ll_FP + ll_Missing)
-        ll_full =  np.log(ll_FN + ll_FP )
+        ll_full =  np.log(ll_FN + ll_FP + 10e-10)
         if flat:
             return bn.nansum(ll_full)
         else:
@@ -243,7 +243,7 @@ class CRP:
         # 20240627 Liting: calculate the FN for all time points
         FN = np.empty((x.shape[0], x.shape[1]))
         # for all cells
-        if np.array_equal(time, [-1]):
+        if np.array_equal(np.array(time), [-1]):
             for i in range(len(self.FN)):
                 idx = np.where(self.timepoint_x == i)[0]
                 cl_x = x[idx, : ]
@@ -390,7 +390,6 @@ class CRP:
 
     '''
     def get_lpost_single_new_cluster(self):
-        print(self._beta_mix_const[0], self._beta_mix_const[0])
         ll_FP = self._beta_mix_const[0] * self._Bernoulli_FP(self.data)
         ll_FN = self._beta_mix_const[1] * self._Bernoulli_FN(self.data)
         # 20240708 Liting: add missing rate
@@ -423,7 +422,6 @@ class CRP:
         new_cl_post = self.get_lpost_single_new_cluster()
         test = np.zeros(self.cells_total)
         print("update assignment with Gibbs============")
-        print(np.fromiter(self.cells_per_cluster.keys(), dtype=int).shape)
         counter = 0
         counter1 = 0
         for cell_id in np.random.permutation(self.cells_total):
@@ -443,8 +441,8 @@ class CRP:
             post_new = new_cl_post[cell_id]
             # Sample new cluster assignment from posterior
             sci = self.get_sci()
-            probs_norm = self._normalize_log_probs(np.append(post_old, post_new * (1 + sci)))
-
+            #probs_norm = self._normalize_log_probs(np.append(post_old, post_new * (1 + sci)))
+            probs_norm = self._normalize_log_probs(np.append(post_old, post_new * (1)))
             cl_ids = np.append(cl_ids, -1)
             new_cluster_id = np.random.choice(cl_ids, p=probs_norm)
 
@@ -701,7 +699,9 @@ class CRP:
         accept, new_params = self.run_rg_nc(
             'merge', cells, cluster_size_data, step_no
         )
-
+        if len(cells_i) == 1 or len(cells_j) == 1:
+            print("Merging singleton clusters")
+            accept = True
         if accept:
             # Update parameters
             self.parameters[cl_i] = new_params
@@ -867,7 +867,7 @@ class CRP:
             return (True, self.rg_params_merge)
         else:
             print("Reject merge", A)
-        return (False, [])
+        return (False, self.rg_params_merge)
 
 
     def _get_trans_prob_ratio_split(self, cells):

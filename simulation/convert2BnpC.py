@@ -5,6 +5,7 @@ import numpy as np
 def getInput(Dfile, cellsFile, outF):
   # get BnpC_ext input
   D = np.genfromtxt(Dfile, delimiter='\t')
+  
   cell_time = [-1] * D.shape[0] # time for each cell, starting from 0
   f = open(cellsFile, "r")
   time2id = {}
@@ -18,7 +19,9 @@ def getInput(Dfile, cellsFile, outF):
     if len(temp) == 1:
       continue
     cells = temp[1].split(";")
+    print("time", time)
     for c in cells:
+      print(c)
       cell_time[int(c)] = time2id[time]
   f.close()
   time_col = np.array(cell_time)
@@ -50,7 +53,6 @@ def getClusters(mutFile, cellsFile, outF):
       node2cell[node].append(c)
   f.close()
   counter = 0
-  print(mut2node)
   for key, nodes in mut2node.items():
     cells = []
     for node in nodes:
