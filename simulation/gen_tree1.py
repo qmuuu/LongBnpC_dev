@@ -351,9 +351,9 @@ parser.add_argument('-t_v', '--time_value', nargs="*", default=[15,7,0])
 parser.add_argument('-v1','--v1', default=0.05)
 parser.add_argument('-v2','--v2', default=0.2)
 parser.add_argument('-u','--u', default=0.1)
-parser.add_argument('-B','--Beta', default=0.3)
+parser.add_argument('-B','--Beta', default=0.2)
 parser.add_argument('-theta','--Theta', default=0.3)
-parser.add_argument('-o', '--out-file', default="tree.tsv")
+parser.add_argument('-o', '--out-file', default="tree.csv")
 
 args = parser.parse_args()
 timepoints = args.timepoints
