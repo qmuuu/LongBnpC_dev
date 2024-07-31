@@ -854,7 +854,7 @@ class CRP:
         if np.log(np.random.random()) < A:
             #print("Accept split", A)
             return (True, self.rg_assignment, self.rg_params_split)
-        else:
+        #else:
             #print("Reject split", A)
         return (False, [], [])
 
