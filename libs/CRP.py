@@ -421,9 +421,8 @@ class CRP:
         """
         new_cl_post = self.get_lpost_single_new_cluster()
         test = np.zeros(self.cells_total)
-        print("update assignment with Gibbs============")
+        #print("update assignment with Gibbs============")
         counter = 0
-        counter1 = 0
         for cell_id in np.random.permutation(self.cells_total):
             # Remove cell from cluster
             old_cluster = self.assignment[cell_id]
@@ -452,13 +451,17 @@ class CRP:
                 # old cluster has more than one cell
                 if old_cluster in self.cells_per_cluster:
                     new_cluster_id = self.init_new_cluster(cell_id)
-                    counter += 1
                 else: # old cluster has beend deleted
                     # self.parameters[old_cluster] keep unchange
                     # new_cluster_id = old_cluster
                     # if singleton, has to join some of the clusters
+                    count = 0
                     while new_cluster_id == -1:
-                        new_cluster_id = np.random.choice(cl_ids, p=probs_norm)   
+                        new_cluster_id = np.random.choice(cl_ids, p=probs_norm)  
+                        count +=1
+                        if count == 10: 
+                            new_cluster_id = self.init_new_cluster(cell_id)
+                            counter += 1
             # Assign to cluster
             self.assignment[cell_id] = new_cluster_id
             try:
@@ -468,7 +471,7 @@ class CRP:
             #print(self.cells_per_cluster)
             #print("cell", cell_id, "new cluster", self.assignment[cell_id])
         counter1 = np.fromiter(self.cells_per_cluster.keys(), dtype=int).shape[0]
-        print("start ", counter, "new cluster",  counter1)
+        #print("start ", counter, "new cluster",  counter1)
     def init_new_cluster(self, cell_id):
         cl_id = self.get_empty_cluster()
         self.parameters[cl_id] = self._init_cl_params_new([cell_id])
@@ -596,9 +599,9 @@ class CRP:
             )
 
         self.DP_a = max(1 + EPSILON, new_alpha)
-        print("Update DP_a", self.DP_a)
+        #print("Update DP_a", self.DP_a)
         self.init_DP_prior()
-        print(self.CRP_prior[-1])
+        #print(self.CRP_prior[-1])
 
 
 # ------------------------------------------------------------------------------
@@ -700,7 +703,7 @@ class CRP:
             'merge', cells, cluster_size_data, step_no
         )
         if len(cells_i) == 1 or len(cells_j) == 1:
-            print("Merging singleton clusters")
+            #print("Merging singleton clusters")
             accept = True
         if accept:
             # Update parameters
@@ -731,10 +734,10 @@ class CRP:
         # Jain, S., Neal, R. (2007) - Section 4.2: 4 or 5 (depending on move)
         # Do last scan to reach c_final and calculate Metropolis Hastings prob
         if move == 'split':
-            print("Doing split=============")
+            #print("Doing split=============")
             return self._do_rg_split_MH(cells, size_data)
         else:
-            print("Doing merge=============")
+            #print("Doing merge=============")
             return self._do_rg_merge_MH(cells, size_data)
 
 
@@ -846,13 +849,13 @@ class CRP:
         # 20240718 Liting: don't accept if result in singleton clusters
         unique_elements, counts = np.unique(self.rg_assignment, return_counts=True)
         if np.any(counts == 1):
-            print("Resulting singleton clusters")
+            #print("Resulting singleton clusters")
             return (False, [], [])
         if np.log(np.random.random()) < A:
-            print("Accept split", A)
+            #print("Accept split", A)
             return (True, self.rg_assignment, self.rg_params_split)
         else:
-            print("Reject split", A)
+            #print("Reject split", A)
         return (False, [], [])
 
 
@@ -863,10 +866,10 @@ class CRP:
             + self._get_ltrans_prob_size_ratio_merge(size_data)
 
         if np.log(np.random.random()) < A:
-            print("Accept merge", A)
+            #print("Accept merge", A)
             return (True, self.rg_params_merge)
-        else:
-            print("Reject merge", A)
+        #else:
+            #print("Reject merge", A)
         return (False, self.rg_params_merge)
 
 
