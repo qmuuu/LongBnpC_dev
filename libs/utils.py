@@ -102,6 +102,7 @@ def _get_MPEAR(assignments):
     dist = squareform(dist)
 
     avg_cl_no = np.mean([np.unique(i).size for i in assignments])
+    print("avg_cl_no", avg_cl_no)
     n_range = np.arange(max(2, avg_cl_no * 0.2),
         min(avg_cl_no * 2.5, assignments.shape[1]), dtype=int)
 
@@ -110,16 +111,17 @@ def _get_MPEAR(assignments):
 
     for n in n_range:
         model = AgglomerativeClustering(
-            affinity='precomputed', n_clusters=n, linkage='complete'
+            metric='precomputed', n_clusters=n, linkage='complete'
         ).fit(dist)
-        score = _calc_MPEAR(sim, model.labels_)
+        score = _calc_MPEAR(sim, model.labels_, n)
         if score > best_MPEAR:
             best_assignment = model.labels_
             best_MPEAR = score
+    print(np.unique(best_assignment))
     return best_assignment
 
 
-def _calc_MPEAR(pi, c):
+def _calc_MPEAR(pi, c, num_clusters):
     # Fritsch, A., Ickstadt, K. (2009) - Eq. 13
     I = 1 - pdist(np.stack([c, c]).T, 'hamming')
 
@@ -129,8 +131,9 @@ def _calc_MPEAR(pi, c):
 
     expected_index = (I_sum * pi_sum) / binom(c.size, 2)
     max_index = .5 * (I_sum + pi_sum)
-
-    return (index - expected_index) / (max_index - expected_index)
+    raw_score = (index - expected_index) / (max_index - expected_index)
+    print(raw_score)
+    return raw_score - num_clusters * 0.01
 
 
 def get_mean_hierarchy_assignment(assignments, params_full):

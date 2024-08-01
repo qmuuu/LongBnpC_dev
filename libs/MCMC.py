@@ -344,8 +344,8 @@ class Chain():
 
             if np.random.random() < self.mcmc['dpa_prob']:
                 self.model.update_DP_alpha()
-        print("===number of singleton cluster after this step:===")
-        print(sum(1 for count in self.model.cells_per_cluster.values() if count == 1))
+        print("===number of cluster after this step:===")
+        print(len(self.model.cells_per_cluster))
         par_declined, par_accepted = self.model.update_parameters()
         self.MH_counter[0][1] += par_declined
         self.MH_counter[0][0] += par_accepted

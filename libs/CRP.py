@@ -440,8 +440,13 @@ class CRP:
             post_new = new_cl_post[cell_id]
             # Sample new cluster assignment from posterior
             sci = self.get_sci()
+            # if the cell is in a singleton cluster, make prob starting new cluster very small
+            if old_cluster not in self.cells_per_cluster:
+                post_new -= 5
+            elif self.cells_per_cluster[old_cluster] < 3:
+                post_new -= 3
             #probs_norm = self._normalize_log_probs(np.append(post_old, post_new * (1 + sci)))
-            probs_norm = self._normalize_log_probs(np.append(post_old, post_new * (1)))
+            probs_norm = self._normalize_log_probs(np.append(post_old, post_new))
             cl_ids = np.append(cl_ids, -1)
             new_cluster_id = np.random.choice(cl_ids, p=probs_norm)
 
@@ -635,7 +640,7 @@ class CRP:
         while True:
             clust_i = np.random.choice(clusters, p=cluster_probs)
             cells = np.argwhere(self.assignment == clust_i).flatten()
-            if cells.size != 1:
+            if cells.size > 3:
                 break
 
         # Get two random items from the cluster
@@ -851,6 +856,8 @@ class CRP:
         if np.any(counts == 1):
             #print("Resulting singleton clusters")
             return (False, [], [])
+        if np.any(counts < 0.2 * self.cells_total):
+            A -= 2
         if np.log(np.random.random()) < A:
             #print("Accept split", A)
             return (True, self.rg_assignment, self.rg_params_split)
