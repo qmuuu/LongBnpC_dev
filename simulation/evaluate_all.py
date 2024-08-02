@@ -12,9 +12,10 @@ exps = ["fn_0.1", "fn_0.3", "fnSD_0.05", "fnSD_0.15", "fp_0.001", "fp_0.05",
 header = ['rep', 'fn', 'fp', 'fnSD', 'fpSD', 'mc', 'miss',
           'missSD', 'mu', 'time', 'method']
 
-BnpC_ext = ""
-BnpC = ""
-true = ""
+BnpC_ext = "/gpfs/research/fangroup/lz20w/BnpC_ext/BnpC_ext_results/"
+BnpC = "/gpfs/research/fangroup/lz20w/BnpC_ext/BnpC_results/"
+BnpC1 = "/gpfs/research/fangroup/lz20w/BnpC_ext/BnpC1_results/"
+true_dir = "/gpfs/research/fangroup/lz20w/BnpC_ext/sim_data/"
 
 default = {
   'rep': '',
@@ -35,8 +36,9 @@ for exp in exps:
   for j in range(1, 6):
     rep = "rep" + str(j)
     path = exp + "/" + rep
-    trueF = true + path + "/true_cluster.tsv"
+    trueF = true_dir + path + "/true_cluster.tsv"
     true = []
+    print(trueF)
     if os.path.exists(trueF):
       f = open(trueF, "r")
       assignment = {}
@@ -57,29 +59,47 @@ for exp in exps:
     if exp.split("_")[0] == 'time':
       temp['time'] = int(exp.split("_")[1]) - 1
 
-    BnpC_result = BnpC + exp + "/assignment.tsv"
+    BnpC_result = BnpC + path + "/assignment.txt"
+    print(BnpC_result)
     if os.path.exists(BnpC_result):
       f = open(BnpC_result, "r")
       line = f.readlines()[1].rstrip().split()
       pred = [int(x) for x in line[2:]]
       v_measure = v_measure_score(true, pred)
       temp['method'] = 'BnpC'
-      temp['v_measure'] = v_measure
+      temp['V_measure'] = v_measure
       if df is None:
         df = pd.DataFrame(columns=default.keys())
         df = df.append(temp, ignore_index=True)
       else:
         df = df.append(temp, ignore_index = True)
-    BnpC_ext_result =  BnpC_ext + exp + "/assignment.tsv"
-    if os.path.exists(BnpC_result):
-      f = open(BnpC_result, "r")
+    
+    BnpC1_result = BnpC1 + path + "/assignment.txt"
+    print(BnpC1_result)
+    if os.path.exists(BnpC1_result):
+      f = open(BnpC1_result, "r")
+      line = f.readlines()[1].rstrip().split()
+      pred = [int(x) for x in line[2:]]
+      v_measure = v_measure_score(true, pred)
+      temp['method'] = 'BnpC1'
+      temp['V_measure'] = v_measure
+      if df is None:
+        df = pd.DataFrame(columns=default.keys())
+        df = df.append(temp, ignore_index=True)
+      else:
+        df = df.append(temp, ignore_index = True)
+    BnpC_ext_result =  BnpC_ext + path + "/assignment.txt"
+    print(BnpC_ext_result)
+    if os.path.exists(BnpC_ext_result):
+      f = open(BnpC_ext_result, "r")
       line = f.readlines()[1].rstrip().split()
       pred = [int(x) for x in line[2:]]
       v_measure = v_measure_score(true, pred)
       temp['method'] = 'BnpC_ext'
-      temp['v_measure'] = v_measure
+      temp['V_measure'] = v_measure
       if df is None:
         df = pd.DataFrame(columns=default.keys())
         df = df.append(temp, ignore_index=True)
       else:
         df = df.append(temp, ignore_index = True)
+df.to_csv("merged_results.tsv", index = False, sep = "\t")
